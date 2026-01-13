@@ -107,7 +107,6 @@ export function drawShapeOnContext(
 
         case 'text':
             if (shape.text && points.length > 0) {
-                console.log('Rendering text:', shape.text, 'at', points[0].x, points[0].y, 'fontSize:', shape.fontSize);
                 const fontSize = (shape.fontSize || 16) / globalScale;
                 ctx.font = `${fontSize}px ${shape.fontFamily || 'Inter'}, sans-serif`;
                 ctx.fillStyle = shape.color;
@@ -149,4 +148,50 @@ export function isPointNearShape(point: {x: number, y: number}, shape: DrawnShap
     maxY += margin;
 
     return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+}
+
+export function getShapeBounds(shape: DrawnShape): { minX: number; maxX: number; minY: number; maxY: number } | null {
+    const { points } = shape;
+    if (!points || points.length === 0) return null;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of points) {
+        minX = Math.min(minX, p.x);
+        maxX = Math.max(maxX, p.x);
+        minY = Math.min(minY, p.y);
+        maxY = Math.max(maxY, p.y);
+    }
+
+    return { minX, maxX, minY, maxY };
+}
+
+export function drawSelectionBox(ctx: CanvasRenderingContext2D, shape: DrawnShape, globalScale: number) {
+    const bounds = getShapeBounds(shape);
+    if (!bounds) return;
+
+    const padding = 5 / globalScale;
+    const { minX, maxX, minY, maxY } = bounds;
+
+    ctx.save();
+    ctx.strokeStyle = '#3B82F6';
+    ctx.lineWidth = 2 / globalScale;
+    ctx.setLineDash([5 / globalScale, 3 / globalScale]);
+    ctx.strokeRect(minX - padding, minY - padding, maxX - minX + padding * 2, maxY - minY + padding * 2);
+    
+    const handleSize = 8 / globalScale;
+    ctx.fillStyle = '#3B82F6';
+    ctx.setLineDash([]);
+    
+    const corners = [
+        { x: minX - padding, y: minY - padding },
+        { x: maxX + padding, y: minY - padding },
+        { x: minX - padding, y: maxY + padding },
+        { x: maxX + padding, y: maxY + padding },
+    ];
+    
+    for (const corner of corners) {
+        ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+    }
+    
+    ctx.restore();
 }

@@ -207,4 +207,53 @@ export const api = {
     update: (id: string, data: Partial<Profile>) =>
       fetchApiWithBody<Profile>(`/api/profiles/${id}`, 'PUT', data),
   },
+
+  drawings: {
+    getByProject: (projectId: string) =>
+      fetchApi<ApiDrawing[]>(`/api/drawings?projectId=${projectId}`),
+    
+    getById: (id: string) =>
+      fetchApi<ApiDrawing>(`/api/drawings/${id}`),
+    
+    create: (data: {
+      projectId: string;
+      type: string;
+      points: string;
+      color: string;
+      width?: number;
+      style: string;
+      text?: string;
+      fontSize?: number;
+      fontFamily?: string;
+    }) => fetchApiWithBody<ApiDrawing>('/api/drawings', 'POST', data),
+    
+    update: (id: string, data: Partial<{
+      type: string;
+      points: string;
+      color: string;
+      width: number;
+      style: string;
+      text: string;
+      fontSize: number;
+      fontFamily: string;
+    }>) => fetchApiWithBody<ApiDrawing>(`/api/drawings/${id}`, 'PUT', data),
+    
+    delete: (id: string) =>
+      fetchApi<void>(`/api/drawings/${id}`, { method: 'DELETE' }),
+  },
 };
+
+export interface ApiDrawing {
+  id: string;
+  projectId: string;
+  type: string;
+  points: string;
+  color: string;
+  width: number;
+  style: string;
+  text: string | null;
+  fontSize: number | null;
+  fontFamily: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

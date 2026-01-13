@@ -6,8 +6,9 @@ import { useGraphStore, filterNodes } from '@/store/useGraphStore';
 import { GROUP_COLORS, RELATIONSHIP_COLORS } from '@/types/knowledge';
 import type { RelationshipType } from '@/types/knowledge';
 import { DrawingProperties } from './DrawingProperties';
-import { drawShapeOnContext, isPointNearShape } from './drawingUtils';
+import { drawShapeOnContext, isPointNearShape, drawSelectionBox } from './drawingUtils';
 import { DrawnShape } from '@/types/knowledge';
+import { api, ApiDrawing } from '@/lib/api';
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ssr: false,
@@ -187,6 +188,7 @@ export function GraphCanvas() {
   const prevPreviewModeRef = useRef(isPreviewMode);
   const [graphTransform, setGraphTransform] = useState({ x: 0, y: 0, k: 1 });
 
+  const currentProject = useGraphStore(state => state.currentProject);
   const shapes = useGraphStore(state => state.shapes);
   const setShapes = useGraphStore(state => state.setShapes);
   const addShape = useGraphStore(state => state.addShape);
@@ -194,14 +196,54 @@ export function GraphCanvas() {
   const redo = useGraphStore(state => state.redo);
   const pushToUndoStack = useGraphStore(state => state.pushToUndoStack);
 
+  const apiDrawingToShape = useCallback((d: ApiDrawing): DrawnShape => ({
+    id: d.id,
+    type: d.type as DrawnShape['type'],
+    points: JSON.parse(d.points),
+    color: d.color,
+    width: d.width,
+    style: d.style as DrawnShape['style'],
+    text: d.text || undefined,
+    fontSize: d.fontSize || undefined,
+    fontFamily: d.fontFamily || undefined,
+  }), []);
+
+  const shapeToApiDrawing = useCallback((s: DrawnShape, projectId: string) => ({
+    projectId,
+    type: s.type,
+    points: JSON.stringify(s.points),
+    color: s.color,
+    width: s.width,
+    style: s.style,
+    text: s.text,
+    fontSize: s.fontSize,
+    fontFamily: s.fontFamily,
+  }), []);
+
+  useEffect(() => {
+    if (!currentProject?.id) return;
+
+    api.drawings.getByProject(currentProject.id)
+      .then(drawings => {
+        const loadedShapes = drawings.map(apiDrawingToShape);
+        setShapes(loadedShapes);
+      })
+      .catch(err => console.error('Failed to load drawings:', err));
+  }, [currentProject?.id, apiDrawingToShape, setShapes]);
+
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentPoints, setCurrentPoints] = useState<{ x: number; y: number }[]>([]);
   const [textInputPos, setTextInputPos] = useState<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [textInputValue, setTextInputValue] = useState('');
 
+  const [selectedShapeIds, setSelectedShapeIds] = useState<Set<string>>(new Set());
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false);
+  const [dragStartWorld, setDragStartWorld] = useState<{ x: number; y: number } | null>(null);
+
   const isDrawingTool = ['pen', 'rectangle', 'diamond', 'circle', 'arrow', 'line', 'eraser'].includes(graphSettings.activeTool);
   const isTextTool = graphSettings.activeTool === 'text';
+  const isSelectTool = graphSettings.activeTool === 'select';
 
   // Reheat simulation for undo/redo
   useEffect(() => {
@@ -212,7 +254,20 @@ export function GraphCanvas() {
     }
   }, [shapes]);
 
-  // Handle Undo/Redo shortcuts
+  // Clear text input when switching tools
+  useEffect(() => {
+    if (!isTextTool && textInputPos) {
+      setTextInputPos(null);
+      setTextInputValue('');
+    }
+  }, [graphSettings.activeTool, isTextTool, textInputPos]);
+
+  // Handle Undo/Redo and Delete shortcuts
+  const shapesRef = useRef(shapes);
+  const selectedShapeIdsRef = useRef(selectedShapeIds);
+  shapesRef.current = shapes;
+  selectedShapeIdsRef.current = selectedShapeIds;
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -221,12 +276,24 @@ export function GraphCanvas() {
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
         e.preventDefault();
         redo();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeIdsRef.current.size > 0) {
+        e.preventDefault();
+        pushToUndoStack(shapesRef.current);
+        const toDelete = shapesRef.current.filter(s => selectedShapeIdsRef.current.has(s.id));
+        const remaining = shapesRef.current.filter(s => !selectedShapeIdsRef.current.has(s.id));
+        setShapes(remaining);
+        toDelete.forEach(s => {
+          api.drawings.delete(s.id).catch(err => console.error('Failed to delete drawing:', err));
+        });
+        setSelectedShapeIds(new Set());
+      } else if (e.key === 'Escape') {
+        setSelectedShapeIds(new Set());
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  }, [undo, redo, pushToUndoStack, setShapes]);
 
 
 
@@ -364,9 +431,13 @@ export function GraphCanvas() {
 
     if (graphSettings.activeTool === 'eraser') {
       const scale = graphTransform.k || 1;
+      const erasedShapes = shapes.filter(s => isPointNearShape(worldPoint, s, scale));
       const remaining = shapes.filter(s => !isPointNearShape(worldPoint, s, scale));
       if (remaining.length !== shapes.length) {
         setShapes(remaining);
+        erasedShapes.forEach(s => {
+          api.drawings.delete(s.id).catch(err => console.error('Failed to delete drawing:', err));
+        });
       }
       return;
     }
@@ -412,6 +483,12 @@ export function GraphCanvas() {
     };
 
     addShape(newShape);
+
+    if (currentProject?.id) {
+      api.drawings.create(shapeToApiDrawing(newShape, currentProject.id))
+        .catch(err => console.error('Failed to save drawing:', err));
+    }
+
     setIsDrawing(false);
     setStartPoint(null);
     setCurrentPoints([]);
@@ -424,11 +501,14 @@ export function GraphCanvas() {
         setTimeout(() => graphRef.current.zoom(currentZoom, 0), 20);
       }
     }, 10);
-  }, [isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, drawPreview]);
+  }, [isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, drawPreview, currentProject?.id, shapeToApiDrawing, addShape]);
 
   const onRenderFramePost = useCallback((ctx: CanvasRenderingContext2D, globalScale: number) => {
     shapes.forEach(shape => {
       drawShapeOnContext(ctx, shape, globalScale);
+      if (selectedShapeIds.has(shape.id)) {
+        drawSelectionBox(ctx, shape, globalScale);
+      }
     });
 
     if (isDrawing && currentPoints.length > 0) {
@@ -442,7 +522,7 @@ export function GraphCanvas() {
       };
       drawShapeOnContext(ctx, previewShape, globalScale, true);
     }
-  }, [shapes, isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle]);
+  }, [shapes, isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, selectedShapeIds]);
 
   return (
     <div ref={containerRef} className="relative h-full w-full bg-zinc-950" suppressHydrationWarning>
@@ -495,6 +575,85 @@ export function GraphCanvas() {
               onMouseLeave={handleCanvasMouseUp}
             />
           )}
+          {isSelectTool && (
+            <div
+              className="absolute inset-0 z-20 cursor-default"
+              onMouseDown={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const screenX = e.clientX - rect.left;
+                const screenY = e.clientY - rect.top;
+                const worldPoint = screenToWorld(screenX, screenY);
+                const scale = graphTransform.k || 1;
+
+                const clickedShape = shapes.find(s => isPointNearShape(worldPoint, s, scale, 10));
+
+                if (clickedShape) {
+                  if (e.shiftKey) {
+                    setSelectedShapeIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(clickedShape.id)) {
+                        next.delete(clickedShape.id);
+                      } else {
+                        next.add(clickedShape.id);
+                      }
+                      return next;
+                    });
+                  } else {
+                    setSelectedShapeIds(new Set([clickedShape.id]));
+                  }
+                  setIsDraggingSelection(true);
+                  setDragStartWorld(worldPoint);
+                  pushToUndoStack(shapes);
+                } else {
+                  setSelectedShapeIds(new Set());
+                }
+              }}
+              onMouseMove={(e) => {
+                if (!isDraggingSelection || !dragStartWorld || selectedShapeIds.size === 0) return;
+
+                const rect = e.currentTarget.getBoundingClientRect();
+                const screenX = e.clientX - rect.left;
+                const screenY = e.clientY - rect.top;
+                const worldPoint = screenToWorld(screenX, screenY);
+
+                const dx = worldPoint.x - dragStartWorld.x;
+                const dy = worldPoint.y - dragStartWorld.y;
+
+                if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+                  const updatedShapes = shapes.map(s => {
+                    if (selectedShapeIds.has(s.id)) {
+                      return {
+                        ...s,
+                        points: s.points.map(p => ({ x: p.x + dx, y: p.y + dy }))
+                      };
+                    }
+                    return s;
+                  });
+                  setShapes(updatedShapes);
+                  setDragStartWorld(worldPoint);
+                }
+              }}
+              onMouseUp={() => {
+                if (isDraggingSelection && selectedShapeIds.size > 0) {
+                  shapes.filter(s => selectedShapeIds.has(s.id)).forEach(s => {
+                    api.drawings.update(s.id, { points: JSON.stringify(s.points) })
+                      .catch(err => console.error('Failed to update drawing:', err));
+                  });
+                }
+                setIsDraggingSelection(false);
+                setDragStartWorld(null);
+                if (graphRef.current) {
+                  const z = graphRef.current.zoom();
+                  graphRef.current.zoom(z * 1.00001, 0);
+                  graphRef.current.zoom(z, 0);
+                }
+              }}
+              onMouseLeave={() => {
+                setIsDraggingSelection(false);
+                setDragStartWorld(null);
+              }}
+            />
+          )}
           {isTextTool && (
             <div
               className="absolute inset-0 z-20 cursor-text"
@@ -533,6 +692,10 @@ export function GraphCanvas() {
                       fontFamily: graphSettings.fontFamily || 'Inter',
                     };
                     addShape(newShape);
+                    if (currentProject?.id) {
+                      api.drawings.create(shapeToApiDrawing(newShape, currentProject.id))
+                        .catch(err => console.error('Failed to save text:', err));
+                    }
                     setTextInputPos(null);
                     setTextInputValue('');
                     setTimeout(() => {
@@ -561,6 +724,10 @@ export function GraphCanvas() {
                       fontFamily: graphSettings.fontFamily || 'Inter',
                     };
                     addShape(newShape);
+                    if (currentProject?.id) {
+                      api.drawings.create(shapeToApiDrawing(newShape, currentProject.id))
+                        .catch(err => console.error('Failed to save text:', err));
+                    }
                     setTimeout(() => {
                       if (graphRef.current) {
                         const z = graphRef.current.zoom();

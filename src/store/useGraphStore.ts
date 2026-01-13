@@ -267,7 +267,6 @@ export const useGraphStore = create<AppState>()(
         currentProject: state.currentProject,
         projects: state.projects,
         graphSettings: state.graphSettings,
-        shapes: state.shapes,
       }),
 
       merge: (persistedState: any, currentState) => {
