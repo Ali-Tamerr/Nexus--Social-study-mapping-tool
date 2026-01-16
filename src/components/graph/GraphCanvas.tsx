@@ -659,19 +659,18 @@ export function GraphCanvas() {
     }
   }, []);
 
-  const handleNodeDragEnd = useCallback(() => {
+  const handleNodeDragEnd = useCallback((node: any) => {
+    const storeNodes = useGraphStore.getState().nodes;
+    const updateNode = useGraphStore.getState().updateNode;
+
     if (dragGroupRef.current?.active) {
       const selectedNodeIds = selectedNodeIdsRef.current;
-      const storeNodes = useGraphStore.getState().nodes;
 
-      // Persist node positions
-      const updateNode = useGraphStore.getState().updateNode;
+      // Persist node positions for all selected nodes
       graphDataRef.current.nodes.forEach((n: any) => {
         if (selectedNodeIds.has(String(n.id))) {
-          // Update local store
           updateNode(String(n.id), { x: n.x, y: n.y });
 
-          // Find full node data from store and persist to backend
           const fullNode = storeNodes.find(sn => sn.id === String(n.id));
           if (fullNode) {
             api.nodes.update(String(n.id), {
@@ -703,6 +702,25 @@ export function GraphCanvas() {
       }
 
       dragGroupRef.current = null;
+    } else if (node) {
+      // Single node drag - persist position
+      const nodeId = String(node.id);
+      updateNode(nodeId, { x: node.x, y: node.y });
+
+      const fullNode = storeNodes.find(sn => sn.id === nodeId);
+      if (fullNode) {
+        api.nodes.update(nodeId, {
+          id: fullNode.id,
+          title: fullNode.title,
+          content: fullNode.content || '',
+          excerpt: fullNode.excerpt || '',
+          groupId: fullNode.groupId,
+          projectId: fullNode.projectId,
+          userId: fullNode.userId,
+          x: node.x,
+          y: node.y
+        }).catch(err => console.error('Failed to update node position:', err));
+      }
     }
   }, [setShapes]);
 
