@@ -145,7 +145,7 @@ export const api = {
     getById: (id: string) =>
       fetchApi<Link>(`/api/links/${id}`),
     
-    create: (data: { sourceId: string; targetId: string; relationshipType?: string; userId?: string }) =>
+    create: (data: { sourceId: string; targetId: string; relationshipType?: string; description?: string; userId?: string }) =>
       fetchApiWithBody<Link>('/api/links', 'POST', data),
     
     update: (id: string, data: Partial<Link>) =>

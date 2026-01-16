@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, Trash2, Plus, Image, Video, Link2, FileText, ExternalLink, Tag, Loader2 } from 'lucide-react';
+import { X, Save, Trash2, Plus, Image, Video, Link2, FileText, ExternalLink, Tag, Loader2, ArrowRight } from 'lucide-react';
 import { useGraphStore } from '@/store/useGraphStore';
-import { Attachment, Tag as TagType, GROUP_COLORS } from '@/types/knowledge';
+import { useAuthStore } from '@/store/useAuthStore';
+import { Attachment, Tag as TagType, Link as LinkType, GROUP_COLORS, RELATIONSHIP_COLORS } from '@/types/knowledge';
 import { api } from '@/lib/api';
 
 export function NodeEditor() {
@@ -18,22 +19,32 @@ export function NodeEditor() {
   const addTagToNode = useGraphStore((s) => s.addTagToNode);
   const removeTagFromNode = useGraphStore((s) => s.removeTagFromNode);
   const currentUserId = useGraphStore((s) => s.currentUserId);
+  const nodes = useGraphStore((s) => s.nodes);
+  const links = useGraphStore((s) => s.links);
+  const addLink = useGraphStore((s) => s.addLink);
+  const deleteLink = useGraphStore((s) => s.deleteLink);
+  const { user } = useAuthStore();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [groupId, setGroupId] = useState(0);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [showTagMenu, setShowTagMenu] = useState(false);
+  const [showConnectionMenu, setShowConnectionMenu] = useState(false);
   const [newAttachmentUrl, setNewAttachmentUrl] = useState('');
   const [newAttachmentName, setNewAttachmentName] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#8B5CF6');
+  const [selectedTargetNodeId, setSelectedTargetNodeId] = useState('');
+  const [connectionDescription, setConnectionDescription] = useState('');
+  const [connectionType, setConnectionType] = useState<'supports' | 'contradicts' | 'neutral'>('neutral');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
   const tagMenuRef = useRef<HTMLDivElement>(null);
+  const connectionMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (activeNode) {
@@ -51,6 +62,9 @@ export function NodeEditor() {
       if (tagMenuRef.current && !tagMenuRef.current.contains(e.target as Node)) {
         setShowTagMenu(false);
       }
+      if (connectionMenuRef.current && !connectionMenuRef.current.contains(e.target as Node)) {
+        setShowConnectionMenu(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -64,9 +78,15 @@ export function NodeEditor() {
 
     try {
       await api.nodes.update(activeNode.id, {
+        id: activeNode.id,
         title,
-        content: content || undefined,
+        content: content || '',
+        excerpt: activeNode.excerpt || '',
         groupId,
+        projectId: activeNode.projectId,
+        userId: activeNode.userId,
+        x: activeNode.x,
+        y: activeNode.y,
       });
       updateNode(activeNode.id, { title, content, groupId });
     } catch (err) {
@@ -110,7 +130,7 @@ export function NodeEditor() {
         fileUrl: newAttachmentUrl.trim(),
         contentType,
         fileSize: 0,
-        userId: currentUserId || undefined,
+        userId: currentUserId || user?.id || undefined,
       });
       addAttachmentToNode(activeNode.id, attachment);
       setNewAttachmentUrl('');
@@ -143,7 +163,7 @@ export function NodeEditor() {
         tag = await api.tags.create({
           name: newTagName.trim(),
           color: newTagColor,
-          userId: currentUserId || undefined,
+          userId: currentUserId || user?.id || undefined,
         });
       }
 
@@ -164,6 +184,48 @@ export function NodeEditor() {
       removeTagFromNode(activeNode.id, tagId);
     } catch (err) {
       console.error('Failed to remove tag:', err);
+    }
+  };
+
+  const handleAddConnection = async () => {
+    if (!activeNode || !selectedTargetNodeId) return;
+
+    const userId = currentUserId || user?.id;
+    if (!userId) {
+      setError('User ID is required to create connections');
+      return;
+    }
+
+    const linkData = {
+      sourceId: activeNode.id,
+      targetId: selectedTargetNodeId,
+      relationshipType: connectionType,
+      description: connectionDescription.trim() || null,
+      userId: userId,
+    };
+
+    console.log('Creating link with data:', linkData);
+
+    try {
+      const newLink = await api.links.create(linkData);
+      addLink(newLink);
+      setSelectedTargetNodeId('');
+      setConnectionDescription('');
+      setConnectionType('neutral');
+      setShowConnectionMenu(false);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to add connection:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add connection');
+    }
+  };
+
+  const handleRemoveConnection = async (linkId: string) => {
+    try {
+      await api.links.delete(linkId);
+      deleteLink(linkId);
+    } catch (err) {
+      console.error('Failed to remove connection:', err);
     }
   };
 
@@ -188,6 +250,9 @@ export function NodeEditor() {
 
   const attachments = activeNode.attachments || [];
   const tags = activeNode.tags || [];
+  const nodeConnections = links.filter(l => l.sourceId === activeNode.id || l.targetId === activeNode.id);
+  const connectedNodeIds = new Set(nodeConnections.flatMap(l => [l.sourceId, l.targetId]));
+  const availableNodes = nodes.filter(n => n.id !== activeNode.id && !connectedNodeIds.has(n.id));
 
   return (
     <div className="fixed right-0 top-0 z-30 flex h-full w-96 flex-col border-l border-zinc-800 bg-zinc-900/95 backdrop-blur-sm">
@@ -394,6 +459,110 @@ export function NodeEditor() {
                     </div>
                   </div>
                 ))
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-zinc-300">Connections</label>
+              <div className="relative" ref={connectionMenuRef}>
+                <button
+                  onClick={() => setShowConnectionMenu(!showConnectionMenu)}
+                  className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add
+                </button>
+
+                {showConnectionMenu && (
+                  <div className="absolute right-0 top-8 z-10 w-72 rounded-lg border border-zinc-700 bg-zinc-800 p-3 shadow-xl">
+                    <div className="mb-2">
+                      <label className="text-xs text-zinc-400">Connect to Node</label>
+                      <select
+                        value={selectedTargetNodeId}
+                        onChange={(e) => setSelectedTargetNodeId(e.target.value)}
+                        className="mt-1 w-full rounded-lg bg-zinc-700 px-3 py-1.5 text-sm text-white outline-none"
+                      >
+                        <option value="">Select a node...</option>
+                        {availableNodes.map(n => (
+                          <option key={n.id} value={n.id}>{n.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-2">
+                      <label className="text-xs text-zinc-400">Relationship Type</label>
+                      <div className="mt-1 flex gap-1">
+                        {(['supports', 'neutral', 'contradicts'] as const).map(type => (
+                          <button
+                            key={type}
+                            onClick={() => setConnectionType(type)}
+                            className={`flex-1 rounded-lg px-2 py-1.5 text-xs capitalize transition-colors ${connectionType === type
+                              ? 'ring-2 ring-white'
+                              : 'hover:brightness-110'
+                              }`}
+                            style={{ backgroundColor: RELATIONSHIP_COLORS[type] }}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <label className="text-xs text-zinc-400">Description (optional)</label>
+                      <input
+                        type="text"
+                        value={connectionDescription}
+                        onChange={(e) => setConnectionDescription(e.target.value)}
+                        placeholder="Describe this connection..."
+                        className="mt-1 w-full rounded-lg bg-zinc-700 px-3 py-1.5 text-sm text-white placeholder-zinc-500 outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={handleAddConnection}
+                      disabled={!selectedTargetNodeId}
+                      className="w-full rounded-lg bg-[#3B82F6] py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#265fbd] disabled:opacity-50"
+                    >
+                      Add Connection
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-2 space-y-2">
+              {nodeConnections.length === 0 ? (
+                <p className="text-xs text-zinc-500">No connections yet</p>
+              ) : (
+                nodeConnections.map((link) => {
+                  const isSource = link.sourceId === activeNode.id;
+                  const connectedNodeId = isSource ? link.targetId : link.sourceId;
+                  const connectedNode = nodes.find(n => n.id === connectedNodeId);
+                  return (
+                    <div
+                      key={link.id}
+                      className="flex items-center justify-between rounded-lg bg-zinc-800 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: RELATIONSHIP_COLORS[link.relationshipType as keyof typeof RELATIONSHIP_COLORS] || RELATIONSHIP_COLORS.neutral }}
+                        />
+                        <span className="text-xs text-zinc-400">{isSource ? 'to' : 'from'}</span>
+                        <span className="truncate text-sm text-white">{connectedNode?.title || 'Unknown'}</span>
+                        {link.description && (
+                          <span className="truncate text-xs text-zinc-500">({link.description})</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveConnection(link.id)}
+                        className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-red-400"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

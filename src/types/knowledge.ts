@@ -49,6 +49,7 @@ export interface Link {
   sourceId: string;
   targetId: string;
   relationshipType: 'supports' | 'contradicts' | 'neutral' | string;
+  description?: string;
   userId?: string;
   createdAt?: string;
 }

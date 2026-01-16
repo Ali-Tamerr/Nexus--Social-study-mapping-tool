@@ -76,6 +76,7 @@ export function GraphCanvas() {
         source: l.sourceId,
         target: l.targetId,
         relationshipType: l.relationshipType,
+        description: l.description,
       }));
 
     return { nodes: graphNodes, links: graphLinks };
@@ -962,6 +963,33 @@ export function GraphCanvas() {
             linkDirectionalArrowLength={4}
             linkDirectionalArrowRelPos={1}
             linkCurvature={0.1}
+            linkCanvasObjectMode={() => 'after'}
+            linkCanvasObject={(link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+              if (!link.description) return;
+
+              const source = link.source;
+              const target = link.target;
+              if (!source?.x || !target?.x) return;
+
+              const midX = (source.x + target.x) / 2;
+              const midY = (source.y + target.y) / 2;
+
+              const fontSize = Math.max(10 / globalScale, 2);
+              ctx.font = `${fontSize}px Inter, sans-serif`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+
+              const padding = 3 / globalScale;
+              const textWidth = ctx.measureText(link.description).width;
+
+              ctx.fillStyle = 'rgba(24, 24, 27, 0.9)';
+              ctx.beginPath();
+              ctx.roundRect(midX - textWidth / 2 - padding, midY - fontSize / 2 - padding, textWidth + padding * 2, fontSize + padding * 2, 3 / globalScale);
+              ctx.fill();
+
+              ctx.fillStyle = '#a1a1aa';
+              ctx.fillText(link.description, midX, midY);
+            }}
             onNodeClick={handleNodeClick}
             onNodeHover={handleNodeHover}
             onNodeDrag={handleNodeDrag}
