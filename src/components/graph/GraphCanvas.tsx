@@ -7,6 +7,7 @@ import { GROUP_COLORS } from '@/types/knowledge';
 import { DrawingProperties } from './DrawingProperties';
 import { ConnectionProperties } from './ConnectionProperties';
 import { drawShapeOnContext, isPointNearShape, drawSelectionBox, isShapeInMarquee, drawMarquee } from './drawingUtils';
+import { getShapeBounds, drawResizeHandles, getHandleAtPoint, resizeShape, getCursorForHandle, ResizeHandle, ShapeBounds } from './resizeUtils';
 import { DrawnShape } from '@/types/knowledge';
 import { api, ApiDrawing } from '@/lib/api';
 
@@ -329,6 +330,15 @@ export function GraphCanvas() {
   const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(null);
   const dragNodePrevRef = useRef<{ x: number; y: number } | null>(null);
 
+  const [isResizing, setIsResizing] = useState(false);
+  const activeResizeHandleRef = useRef<ResizeHandle | null>(null);
+  const resizeStartBoundsRef = useRef<ShapeBounds | null>(null);
+  const resizeDragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const resizingShapeIdRef = useRef<string | null>(null);
+  const originalShapeRef = useRef<DrawnShape | null>(null);
+  const [hoveredResizeHandle, setHoveredResizeHandle] = useState<ResizeHandle | null>(null);
+  const [resizeUpdateCounter, setResizeUpdateCounter] = useState(0);
+
   const isDrawingTool = ['pen', 'rectangle', 'diamond', 'circle', 'arrow', 'line', 'eraser'].includes(graphSettings.activeTool);
   const isTextTool = graphSettings.activeTool === 'text';
   const isSelectTool = graphSettings.activeTool === 'select';
@@ -350,11 +360,33 @@ export function GraphCanvas() {
     }
   }, [graphSettings.activeTool, isTextTool, textInputPos]);
 
+  useEffect(() => {
+    if (!isResizing || !graphRef.current) return;
+
+    let animationFrameId: number;
+    const refresh = () => {
+      if (graphRef.current) {
+        const z = graphRef.current.zoom();
+        graphRef.current.zoom(z * 1.00001, 0);
+        graphRef.current.zoom(z, 0);
+      }
+      animationFrameId = requestAnimationFrame(refresh);
+    };
+
+    animationFrameId = requestAnimationFrame(refresh);
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isResizing]);
+
   // Handle Undo/Redo and Delete shortcuts
   const shapesRef = useRef(shapes);
   const selectedShapeIdsRef = useRef(selectedShapeIds);
-  // Only sync refs with state if NOT dragging (to allow transient updates during drag)
-  if (!dragNodePrevRef.current) {
+  // Only sync refs with state if NOT dragging and NOT resizing (to allow transient updates)
+  if (!dragNodePrevRef.current && !isResizing) {
     shapesRef.current = shapes;
   }
   selectedShapeIdsRef.current = selectedShapeIds;
@@ -948,12 +980,18 @@ export function GraphCanvas() {
   }, [isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, drawPreview, currentProject?.id, shapeToApiDrawing, addShape]);
 
   const onRenderFramePost = useCallback((ctx: CanvasRenderingContext2D, globalScale: number) => {
-    // Use ref to render shapes to assume smooth dragging
     const renderShapes = shapesRef.current;
     renderShapes.forEach(shape => {
       drawShapeOnContext(ctx, shape, globalScale);
       if (selectedShapeIds.has(shape.id)) {
         drawSelectionBox(ctx, shape, globalScale);
+
+        if (selectedShapeIds.size === 1) {
+          const bounds = getShapeBounds(shape);
+          if (bounds) {
+            drawResizeHandles(ctx, bounds, globalScale);
+          }
+        }
       }
     });
 
@@ -972,7 +1010,7 @@ export function GraphCanvas() {
     if (isMarqueeSelecting && marqueeStart && marqueeEnd) {
       drawMarquee(ctx, marqueeStart, marqueeEnd, globalScale);
     }
-  }, [shapes, isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, selectedShapeIds, isMarqueeSelecting, marqueeStart, marqueeEnd]);
+  }, [shapes, isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, selectedShapeIds, isMarqueeSelecting, marqueeStart, marqueeEnd, isResizing, resizeUpdateCounter]);
 
   return (
     <div ref={containerRef} className="relative h-full w-full bg-zinc-950" suppressHydrationWarning
@@ -1079,8 +1117,8 @@ export function GraphCanvas() {
             <div
               className="absolute inset-0 z-20"
               style={{
-                pointerEvents: (isHoveringShape || isDraggingSelection || isMarqueeSelecting) ? 'auto' : 'none',
-                cursor: isHoveringShape ? 'move' : 'crosshair'
+                pointerEvents: (isHoveringShape || isDraggingSelection || isMarqueeSelecting || isResizing || hoveredResizeHandle) ? 'auto' : 'none',
+                cursor: hoveredResizeHandle ? getCursorForHandle(hoveredResizeHandle) : (isHoveringShape ? 'move' : 'crosshair')
               }}
               onMouseDown={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -1088,6 +1126,26 @@ export function GraphCanvas() {
                 const screenY = e.clientY - rect.top;
                 const worldPoint = screenToWorld(screenX, screenY);
                 const scale = graphTransform.k || 1;
+
+                if (selectedShapeIds.size === 1) {
+                  const selectedShape = shapes.find(s => selectedShapeIds.has(s.id));
+                  if (selectedShape) {
+                    const bounds = getShapeBounds(selectedShape);
+                    if (bounds) {
+                      const handle = getHandleAtPoint(worldPoint, bounds, scale);
+                      if (handle) {
+                        setIsResizing(true);
+                        activeResizeHandleRef.current = handle;
+                        resizeStartBoundsRef.current = bounds;
+                        resizeDragStartRef.current = worldPoint;
+                        resizingShapeIdRef.current = selectedShape.id;
+                        originalShapeRef.current = { ...selectedShape, points: [...selectedShape.points] };
+                        pushToUndoStack(shapes);
+                        return;
+                      }
+                    }
+                  }
+                }
 
                 const clickedShape = shapes.find(s => isPointNearShape(worldPoint, s, scale, 10));
 
@@ -1126,6 +1184,7 @@ export function GraphCanvas() {
                 const screenX = e.clientX - rect.left;
                 const screenY = e.clientY - rect.top;
                 const worldPoint = screenToWorld(screenX, screenY);
+                const scale = graphTransform.k || 1;
 
                 if (isMarqueeSelecting) {
                   setMarqueeEnd(worldPoint);
@@ -1135,6 +1194,40 @@ export function GraphCanvas() {
                     graphRef.current.zoom(z, 0);
                   }
                   return;
+                }
+
+                if (isResizing && activeResizeHandleRef.current && resizeStartBoundsRef.current && resizeDragStartRef.current && originalShapeRef.current) {
+                  const resizedShape = resizeShape(
+                    originalShapeRef.current,
+                    activeResizeHandleRef.current,
+                    worldPoint,
+                    resizeDragStartRef.current,
+                    resizeStartBoundsRef.current
+                  );
+                  shapesRef.current = shapesRef.current.map(s => s.id === resizedShape.id ? resizedShape : s);
+                  setResizeUpdateCounter(c => c + 1);
+
+                  if (graphRef.current) {
+                    const z = graphRef.current.zoom();
+                    graphRef.current.zoom(z * 1.00001, 0);
+                    graphRef.current.zoom(z, 0);
+                  }
+                  return;
+                }
+
+                if (selectedShapeIds.size === 1 && !isDraggingSelection) {
+                  const selectedShape = shapes.find(s => selectedShapeIds.has(s.id));
+                  if (selectedShape) {
+                    const bounds = getShapeBounds(selectedShape);
+                    if (bounds) {
+                      const handle = getHandleAtPoint(worldPoint, bounds, scale);
+                      setHoveredResizeHandle(handle);
+                    } else {
+                      setHoveredResizeHandle(null);
+                    }
+                  }
+                } else {
+                  setHoveredResizeHandle(null);
                 }
 
                 if (!isDraggingSelection || !dragStartWorld || selectedShapeIds.size === 0) return;
@@ -1172,6 +1265,25 @@ export function GraphCanvas() {
                 }
               }}
               onMouseUp={() => {
+                if (isResizing && resizingShapeIdRef.current) {
+                  const finalShapes = shapesRef.current;
+                  setShapes(finalShapes);
+
+                  const resizedShape = finalShapes.find(s => s.id === resizingShapeIdRef.current);
+                  if (resizedShape) {
+                    api.drawings.update(resizedShape.id, { points: JSON.stringify(resizedShape.points) })
+                      .catch(err => console.error('Failed to update drawing:', err));
+                  }
+
+                  setIsResizing(false);
+                  activeResizeHandleRef.current = null;
+                  resizeStartBoundsRef.current = null;
+                  resizeDragStartRef.current = null;
+                  resizingShapeIdRef.current = null;
+                  originalShapeRef.current = null;
+                  return;
+                }
+
                 if (isMarqueeSelecting && marqueeStart && marqueeEnd) {
                   const minX = Math.min(marqueeStart.x, marqueeEnd.x);
                   const maxX = Math.max(marqueeStart.x, marqueeEnd.x);
@@ -1191,7 +1303,6 @@ export function GraphCanvas() {
                   });
 
                   const selectedNodeIdsNew = new Set<string>();
-                  // Use local graphData which contains the current simulation state including x/y
                   const currentGraphNodes = graphData.nodes as Array<{ id: string | number; x?: number; y?: number }>;
                   currentGraphNodes.forEach(n => {
                     const x = n.x || 0;
