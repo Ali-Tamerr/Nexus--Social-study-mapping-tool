@@ -1522,6 +1522,43 @@ export function GraphCanvas() {
         ))}
       </div>
 
+      <button
+        onClick={() => {
+          if (!graphRef.current) return;
+
+          const allPoints: { x: number; y: number }[] = [];
+
+          const currentGraphNodes = graphData.nodes as Array<{ x?: number; y?: number }>;
+          currentGraphNodes.forEach(n => {
+            if (n.x !== undefined && n.y !== undefined) {
+              allPoints.push({ x: n.x, y: n.y });
+            }
+          });
+
+          shapesRef.current.forEach(shape => {
+            shape.points.forEach(p => {
+              allPoints.push({ x: p.x, y: p.y });
+            });
+          });
+
+          if (allPoints.length === 0) return;
+
+          const sumX = allPoints.reduce((acc, p) => acc + p.x, 0);
+          const sumY = allPoints.reduce((acc, p) => acc + p.y, 0);
+          const centerX = sumX / allPoints.length;
+          const centerY = sumY / allPoints.length;
+
+          graphRef.current.centerAt(centerX, centerY, 500);
+          graphRef.current.zoom(1, 500);
+        }}
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-sm border border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 transition-all"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Go back to content
+      </button>
+
       {selectedLink && (
         <ConnectionProperties
           link={selectedLink}
