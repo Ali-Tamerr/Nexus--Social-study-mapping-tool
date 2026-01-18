@@ -1062,23 +1062,27 @@ export function GraphCanvas() {
       onWheel={(e) => {
         if (!graphRef.current) return;
 
-        if (e.ctrlKey) {
-          return;
-        }
-
         e.preventDefault();
         e.stopPropagation();
 
-        const scale = graphTransform.k || 1;
-        const panX = e.deltaX / scale;
-        const panY = e.deltaY / scale;
+        if (e.ctrlKey || e.metaKey) {
+          const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+          const currentZoom = graphRef.current.zoom();
+          const newZoom = Math.max(0.1, Math.min(10, currentZoom * zoomFactor));
 
-        const currentCenter = graphRef.current.centerAt();
-        graphRef.current.centerAt(
-          currentCenter.x + panX,
-          currentCenter.y + panY,
-          0
-        );
+          graphRef.current.zoom(newZoom, 200);
+        } else {
+          const scale = graphTransform.k || 1;
+          const panX = e.deltaX / scale;
+          const panY = e.deltaY / scale;
+
+          const currentCenter = graphRef.current.centerAt();
+          graphRef.current.centerAt(
+            currentCenter.x + panX,
+            currentCenter.y + panY,
+            0
+          );
+        }
       }}
     >
       {isMounted ? (
