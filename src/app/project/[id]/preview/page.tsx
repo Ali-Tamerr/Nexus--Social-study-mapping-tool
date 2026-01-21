@@ -94,9 +94,9 @@ export default function PreviewPage({ params }: { params: Promise<{ id: string }
                     color: d.color,
                     width: d.width,
                     style: d.style as DrawnShape['style'],
-                    text: d.text || undefined,
-                    fontSize: d.fontSize || undefined,
-                    fontFamily: d.fontFamily || undefined,
+                    text: d.text === null ? undefined : d.text,
+                    fontSize: d.fontSize === null ? undefined : d.fontSize,
+                    fontFamily: d.fontFamily === null ? undefined : d.fontFamily,
                 }));
                 setShapes(loadedShapes);
             } catch (err) {

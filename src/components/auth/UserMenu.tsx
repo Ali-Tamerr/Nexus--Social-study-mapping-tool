@@ -55,7 +55,7 @@ export function UserMenu() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-zinc-800 bg-zinc-900 py-2 shadow-xl">
+        <div className="absolute right-0 z-99 top-full mt-2 w-56 rounded-xl border border-zinc-800 bg-zinc-900 py-2 shadow-xl">
           <div className="border-b border-zinc-800 px-4 pb-3 pt-1">
             <p className="font-medium text-white">{user.displayName || 'User'}</p>
             <p className="text-sm text-zinc-500 truncate">{user.email}</p>
