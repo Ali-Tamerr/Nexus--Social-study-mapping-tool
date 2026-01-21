@@ -15,6 +15,7 @@ import { ProjectNavbar } from '@/components/layout';
 import { GraphCanvas } from '@/components/graph/GraphCanvas';
 import { GraphControls } from '@/components/graph/GraphControls';
 import { NodeEditor } from '@/components/editor/NodeEditor';
+import { NodePreviewPane } from '@/components/editor/NodePreviewPane';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 
 export default function EditorPage() {
@@ -182,6 +183,8 @@ export default function EditorPage() {
         return <LoadingScreen />;
     }
 
+    const isPreviewMode = graphSettings.isPreviewMode;
+
     return (
         <div className="flex h-screen flex-col overflow-hidden bg-zinc-950">
             <ProjectNavbar
@@ -189,22 +192,26 @@ export default function EditorPage() {
                 projectColor={currentProject?.color}
                 nodeCount={filteredNodes.length}
             >
-                <div className="w-64">
-                    <SearchInput
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search nodes..."
-                    />
-                </div>
+                {!isPreviewMode && (
+                    <>
+                        <div className="w-64">
+                            <SearchInput
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search nodes..."
+                            />
+                        </div>
 
-                <Button
-                    variant="brand"
-                    onClick={handleCreateNode}
-                    loading={isLoading}
-                    icon={<Plus className="h-4 w-4" />}
-                >
-                    Add Node
-                </Button>
+                        <Button
+                            variant="brand"
+                            onClick={handleCreateNode}
+                            loading={isLoading}
+                            icon={<Plus className="h-4 w-4" />}
+                        >
+                            Add Node
+                        </Button>
+                    </>
+                )}
             </ProjectNavbar>
 
             {error && (
@@ -213,7 +220,19 @@ export default function EditorPage() {
                 </div>
             )}
 
-            <div className="relative flex-1 overflow-hidden">
+            <div
+                className="relative flex-1 overflow-hidden transition-colors duration-300"
+                style={{
+                    backgroundColor: !currentProject?.wallpaper?.startsWith('url')
+                        ? (currentProject?.wallpaper || undefined)
+                        : undefined,
+                    backgroundImage: currentProject?.wallpaper?.startsWith('url')
+                        ? currentProject.wallpaper
+                        : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center'
+                }}
+            >
                 <GraphControls
                     settings={graphSettings}
                     onSettingsChange={setGraphSettings}
@@ -226,7 +245,7 @@ export default function EditorPage() {
                 )}
             </div>
 
-            <NodeEditor />
+            {isPreviewMode ? <NodePreviewPane /> : <NodeEditor />}
             <CommandPalette />
         </div>
     );

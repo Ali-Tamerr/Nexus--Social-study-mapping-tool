@@ -3,6 +3,7 @@ export interface Project {
   name: string;
   description?: string;
   color?: string;
+  wallpaper?: string;
   userId?: string;
   createdAt: string;
   updatedAt: string;

@@ -592,12 +592,12 @@ export function GraphCanvas() {
   const shapesRef = useRef(filteredShapes);
   const selectedShapeIdsRef = useRef(selectedShapeIds);
   const selectedNodeIdsRefForDelete = useRef(selectedNodeIds);
-  
+
   // Always keep shapesRef in sync with filteredShapes
   useEffect(() => {
     shapesRef.current = filteredShapes;
   }, [filteredShapes]);
-  
+
   // Also sync during render if not dragging/resizing (for immediate updates)
   if (!dragNodePrevRef.current && !isResizing) {
     shapesRef.current = filteredShapes;
@@ -1292,7 +1292,7 @@ export function GraphCanvas() {
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full bg-zinc-950"
+      className="relative h-full w-full bg-transparent"
       style={{
         cursor: getToolCursor(),
         overscrollBehavior: 'none',

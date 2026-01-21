@@ -16,6 +16,7 @@ interface SelectionPaneProps {
     selectedNodeIds: Set<string>;
     selectedShapeIds: Set<string>;
     onClose: () => void;
+    isPreviewMode?: boolean;
 }
 
 function getShapeIcon(type: string) {
@@ -70,6 +71,7 @@ export function SelectionPane({
     selectedNodeIds,
     selectedShapeIds,
     onClose,
+    isPreviewMode = false,
 }: SelectionPaneProps) {
     const [nodesExpanded, setNodesExpanded] = useState(true);
     const [shapesExpanded, setShapesExpanded] = useState(true);
@@ -129,16 +131,18 @@ export function SelectionPane({
                                         >
                                             <MapPin className="w-3.5 h-3.5" />
                                         </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onDeleteNode(node.id);
-                                            }}
-                                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-600 transition-all"
-                                            title="Delete"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                        {!isPreviewMode && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDeleteNode(node.id);
+                                                }}
+                                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-600 transition-all"
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
                                     </div>
                                 ))
                             )}
@@ -186,16 +190,18 @@ export function SelectionPane({
                                             >
                                                 <MapPin className="w-3.5 h-3.5" />
                                             </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onDeleteShape(shape.id);
-                                                }}
-                                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-600 transition-all"
-                                                title="Delete"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
+                                            {!isPreviewMode && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onDeleteShape(shape.id);
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-600 transition-all"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
                                         </div>
                                     );
                                 })

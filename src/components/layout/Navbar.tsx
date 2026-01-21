@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, ChevronDown, Image, Save, LayoutGrid } from 'lucide-react';
+import { Search, ChevronDown, Image, Save, LayoutGrid, ChevronRight, Upload } from 'lucide-react';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useGraphStore } from '@/store/useGraphStore';
 
 interface NavbarProps {
   showSearch?: boolean;
@@ -59,19 +60,59 @@ interface ProjectNavbarProps {
   children?: React.ReactNode;
 }
 
+const WALLPAPER_COLORS = [
+  '#000000', // Black (Default)
+  '#18181b', // Zinc 900
+  '#09090b', // Zinc 950
+  '#020617', // Slate 950
+  '#0f172a', // Slate 900
+  '#0a0a0a', // Neutral 950
+  '#171717', // Neutral 900
+  '#111827', // Gray 900
+  '#0f0f0f', // Onyx
+  '#1a1a1a', // Jet
+];
+
 export function ProjectNavbar({ projectName, projectColor, nodeCount = 0, children }: ProjectNavbarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isWallpaperMenuOpen, setIsWallpaperMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const updateProject = useGraphStore(state => state.updateProject);
+  const currentProject = useGraphStore(state => state.currentProject);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
+        setIsWallpaperMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleColorSelect = (color: string) => {
+    if (currentProject) {
+      updateProject(currentProject.id, { wallpaper: color });
+    }
+    setIsWallpaperMenuOpen(false);
+    setIsMenuOpen(false);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && currentProject) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        updateProject(currentProject.id, { wallpaper: `url(${base64String})` });
+      };
+      reader.readAsDataURL(file);
+    }
+    setIsWallpaperMenuOpen(false);
+    setIsMenuOpen(false);
+  };
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-zinc-800 bg-zinc-900/50 px-4">
@@ -92,13 +133,52 @@ export function ProjectNavbar({ projectName, projectColor, nodeCount = 0, childr
 
           {isMenuOpen && (
             <div className="absolute top-full left-0 mt-2 w-56 rounded-xl border border-zinc-800 bg-zinc-900 shadow-xl p-1.5 z-50 flex flex-col gap-1">
-              <button
-                onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
-              >
-                <Image className="w-4 h-4" />
-                <span>Change wallpaper</span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setIsWallpaperMenuOpen(!isWallpaperMenuOpen)}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Image className="w-4 h-4" />
+                    <span>Change wallpaper</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+
+                {isWallpaperMenuOpen && (
+                  <div className="absolute left-full top-0 ml-2 w-48 rounded-xl border border-zinc-800 bg-zinc-900 shadow-xl p-2 z-50">
+                    <p className="px-2 py-1 text-xs font-medium text-zinc-500 mb-1">Solid Colors</p>
+                    <div className="grid grid-cols-5 gap-2 max-h-32 overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-zinc-700">
+                      {WALLPAPER_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => handleColorSelect(color)}
+                          className="w-6 h-6 rounded-full border border-zinc-700 hover:scale-110 transition-transform"
+                          style={{ backgroundColor: color }}
+                          title={color}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="my-2 border-t border-zinc-800" />
+
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Custom Wallpaper</span>
+                    </button>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                    />
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={() => setIsMenuOpen(false)}
