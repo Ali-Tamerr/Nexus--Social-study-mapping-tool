@@ -13,7 +13,7 @@ import { LoadingScreen, LoadingOverlay } from '@/components/ui';
 import { SearchInput } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ProjectNavbar } from '@/components/layout';
-import { GraphCanvas } from '@/components/graph/GraphCanvas';
+import { GraphCanvas, GraphCanvasHandle } from '@/components/graph/GraphCanvas';
 import { GraphControls } from '@/components/graph/GraphControls';
 import { NodeEditor } from '@/components/editor/NodeEditor';
 import { NodePreviewPane } from '@/components/editor/NodePreviewPane';
@@ -23,6 +23,15 @@ export default function EditorPage() {
     const router = useRouter();
     const [isMounted, setIsMounted] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const graphCanvasRef = useRef<GraphCanvasHandle>(null);
+
+    const handleExportPNG = () => {
+        graphCanvasRef.current?.exportToPNG();
+    };
+
+    const handleExportJPG = () => {
+        graphCanvasRef.current?.exportToJPG();
+    };
 
     const { user, isAuthenticated, hasHydrated: authHydrated } = useAuthStore();
 
@@ -221,6 +230,8 @@ export default function EditorPage() {
                 projectName={currentProject?.name}
                 projectColor={currentProject?.color}
                 nodeCount={filteredNodes.length}
+                onExportPNG={handleExportPNG}
+                onExportJPG={handleExportJPG}
             >
                 {!isPreviewMode && (
                     <>
@@ -277,7 +288,7 @@ export default function EditorPage() {
                     {isLoading && nodes.length === 0 ? (
                         <LoadingOverlay message="Loading graph..." />
                     ) : (
-                        <GraphCanvas />
+                        <GraphCanvas ref={graphCanvasRef} />
                     )}
                 </div>
             </div>

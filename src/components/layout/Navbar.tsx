@@ -60,6 +60,7 @@ interface ProjectNavbarProps {
   nodeCount?: number;
   children?: React.ReactNode;
   onExportPNG?: () => void;
+  onExportJPG?: () => void;
 }
 
 const WALLPAPER_COLORS = [
@@ -75,7 +76,7 @@ const WALLPAPER_COLORS = [
   '#1a1a1a', // Jet
 ];
 
-export function ProjectNavbar({ projectName, projectColor, nodeCount = 0, children, onExportPNG }: ProjectNavbarProps) {
+export function ProjectNavbar({ projectName, projectColor, nodeCount = 0, children, onExportPNG, onExportJPG }: ProjectNavbarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isWallpaperMenuOpen, setIsWallpaperMenuOpen] = useState(false);
   const [isSaveAsMenuOpen, setIsSaveAsMenuOpen] = useState(false);
@@ -173,7 +174,11 @@ export function ProjectNavbar({ projectName, projectColor, nodeCount = 0, childr
                     </button>
                     <button
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
-                      onClick={() => { setIsSaveAsMenuOpen(false); setIsMenuOpen(false); /* TODO: handle JPG export */ }}
+                      onClick={() => {
+                        setIsSaveAsMenuOpen(false);
+                        setIsMenuOpen(false);
+                        if (onExportJPG) onExportJPG();
+                      }}
                     >
                       <span>JPG</span>
                     </button>
