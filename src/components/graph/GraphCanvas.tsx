@@ -730,6 +730,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     };
   }, [isResizing]);
 
+  const [isNodeDragging, setIsNodeDragging] = useState(false);
+
+  useEffect(() => {
+    const isInteracting = isMarqueeSelecting || isDraggingSelection || isMiddleMousePanning || isNodeDragging || (activeResizeHandleRef.current !== null);
+    if (isInteracting) {
+      document.body.classList.add('graph-interacting');
+    } else {
+      document.body.classList.remove('graph-interacting');
+    }
+  }, [isMarqueeSelecting, isDraggingSelection, isMiddleMousePanning, isNodeDragging]);
+
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (!containerRef.current?.contains(e.target as Node) || !graphRef.current) return;
@@ -1181,6 +1192,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
   // Handle node drag via ForceGraph - move other selected nodes along
   const handleNodeDrag = useCallback((node: any) => {
     isNodeDraggingRef.current = true;
+    setIsNodeDragging(true);
     lastDragTimeRef.current = Date.now();
     if (!dragGroupRef.current?.active) return;
     if (String(node.id) !== dragGroupRef.current.nodeId) return;
@@ -1232,6 +1244,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     // Small delay to ensure click handler sees the drag state
     setTimeout(() => {
       isNodeDraggingRef.current = false;
+      setIsNodeDragging(false);
     }, 250);
 
     const storeNodes = useGraphStore.getState().nodes;
@@ -1709,6 +1722,13 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
               d3VelocityDecay={isPreviewMode ? 0.3 : 0.9}
               backgroundColor="transparent"
             />
+            <style>{`
+              body.graph-interacting .graph-ui-hide {
+                opacity: 0 !important;
+                pointer-events: none !important;
+                transition: opacity 0.2s;
+              }
+            `}</style>
           </div>
           <canvas
             ref={previewCanvasRef}
@@ -2085,19 +2105,21 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
               />
             </div>
           )}
-          <DrawingProperties
-            activeTool={graphSettings.activeTool}
-            strokeWidth={graphSettings.strokeWidth}
-            strokeColor={graphSettings.strokeColor}
-            strokeStyle={graphSettings.strokeStyle}
-            fontSize={graphSettings.fontSize}
-            fontFamily={graphSettings.fontFamily}
-            onStrokeWidthChange={(w) => setGraphSettings({ strokeWidth: w })}
-            onStrokeColorChange={(c) => setGraphSettings({ strokeColor: c })}
-            onStrokeStyleChange={(s) => setGraphSettings({ strokeStyle: s })}
-            onFontSizeChange={(s) => setGraphSettings({ fontSize: s })}
-            onFontFamilyChange={(f) => setGraphSettings({ fontFamily: f })}
-          />
+          <div className="graph-ui-hide">
+            <DrawingProperties
+              activeTool={graphSettings.activeTool}
+              strokeWidth={graphSettings.strokeWidth}
+              strokeColor={graphSettings.strokeColor}
+              strokeStyle={graphSettings.strokeStyle}
+              fontSize={graphSettings.fontSize}
+              fontFamily={graphSettings.fontFamily}
+              onStrokeWidthChange={(w) => setGraphSettings({ strokeWidth: w })}
+              onStrokeColorChange={(c) => setGraphSettings({ strokeColor: c })}
+              onStrokeStyleChange={(s) => setGraphSettings({ strokeStyle: s })}
+              onFontSizeChange={(s) => setGraphSettings({ fontSize: s })}
+              onFontFamilyChange={(f) => setGraphSettings({ fontFamily: f })}
+            />
+          </div>
         </>
       ) : (
         <div className="flex h-full w-full items-center justify-center">
@@ -2109,81 +2131,83 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       )}
 
 
-      <GroupsTabs
-        groups={groups}
-        activeGroupId={activeGroupId}
-        onSelectGroup={setActiveGroupId}
-        onAddGroup={async () => {
-          const newName = `Group ${groups.length + 1}`;
-          const newColor = getNextGroupColor(groups);
+      <div className="graph-ui-hide">
+        <GroupsTabs
+          groups={groups}
+          activeGroupId={activeGroupId}
+          onSelectGroup={setActiveGroupId}
+          onAddGroup={async () => {
+            const newName = `Group ${groups.length + 1}`;
+            const newColor = getNextGroupColor(groups);
 
-          try {
-            const newGroup = await api.groups.create({ name: newName, color: newColor });
-            const groupWithOrder = { ...newGroup, order: groups.length };
-            addGroup(groupWithOrder);
-            setActiveGroupId(newGroup.id);
-          } catch (err: any) {
-            console.error("Failed to create group:", err.message);
-            alert("Failed to create group. Please try again.");
-          }
-        }}
-        onRenameGroup={(id, newName) => {
-          updateGroup(id, { name: newName });
-          api.groups.update(id, { name: newName })
-            .catch(err => console.warn("Backend sync failed (Rename Group):", err.message));
-        }}
-        onDeleteGroup={async (id) => {
-          const groupToDelete = groups.find(g => g.id === id);
-          const groupOrder = groupToDelete?.order;
-          const nodesInGroup = nodes.filter(n => n.groupId === groupOrder);
-          const shapesInGroup = shapes.filter(s => s.groupId === groupOrder);
-          const nodeCount = nodesInGroup.length;
-          const shapeCount = shapesInGroup.length;
-
-          const groupName = groupToDelete?.name || 'this group';
-          let message = `Are you sure you want to delete "${groupName}"?`;
-          if (nodeCount > 0 || shapeCount > 0) {
-            message += '\n\nThis will permanently delete:';
-            if (nodeCount > 0) message += `\n• ${nodeCount} node${nodeCount > 1 ? 's' : ''}`;
-            if (shapeCount > 0) message += `\n• ${shapeCount} drawing${shapeCount > 1 ? 's' : ''}`;
-          }
-
-          if (!window.confirm(message)) {
-            return;
-          }
-
-          // Delete all nodes in this group
-          for (const node of nodesInGroup) {
-            deleteNode(node.id);
-            api.nodes.delete(node.id).catch(() => { });
-          }
-
-          // Delete all shapes/drawings in this group
-          for (const shape of shapesInGroup) {
-            deleteShape(shape.id);
-            api.drawings.delete(shape.id).catch(() => { });
-          }
-
-          // Delete the group locally
-          deleteGroup(id);
-
-          // Try backend delete silently, fall back to local hide
-          try {
-            await api.groups.delete(id);
-          } catch {
-            const hidden = JSON.parse(localStorage.getItem('nexus_hidden_groups') || '[]');
-            if (!hidden.includes(id)) {
-              hidden.push(id);
-              localStorage.setItem('nexus_hidden_groups', JSON.stringify(hidden));
+            try {
+              const newGroup = await api.groups.create({ name: newName, color: newColor });
+              const groupWithOrder = { ...newGroup, order: groups.length };
+              addGroup(groupWithOrder);
+              setActiveGroupId(newGroup.id);
+            } catch (err: any) {
+              console.error("Failed to create group:", err.message);
+              alert("Failed to create group. Please try again.");
             }
-          }
-        }}
-        onReorderGroups={(newGroups) => {
-          setGroups(newGroups);
-          api.groups.reorder(newGroups.map(g => g.id))
-            .catch(err => console.warn("Backend sync failed (Reorder Groups):", err.message));
-        }}
-      />
+          }}
+          onRenameGroup={(id, newName) => {
+            updateGroup(id, { name: newName });
+            api.groups.update(id, { name: newName })
+              .catch(err => console.warn("Backend sync failed (Rename Group):", err.message));
+          }}
+          onDeleteGroup={async (id) => {
+            const groupToDelete = groups.find(g => g.id === id);
+            const groupOrder = groupToDelete?.order;
+            const nodesInGroup = nodes.filter(n => n.groupId === groupOrder);
+            const shapesInGroup = shapes.filter(s => s.groupId === groupOrder);
+            const nodeCount = nodesInGroup.length;
+            const shapeCount = shapesInGroup.length;
+
+            const groupName = groupToDelete?.name || 'this group';
+            let message = `Are you sure you want to delete "${groupName}"?`;
+            if (nodeCount > 0 || shapeCount > 0) {
+              message += '\n\nThis will permanently delete:';
+              if (nodeCount > 0) message += `\n• ${nodeCount} node${nodeCount > 1 ? 's' : ''}`;
+              if (shapeCount > 0) message += `\n• ${shapeCount} drawing${shapeCount > 1 ? 's' : ''}`;
+            }
+
+            if (!window.confirm(message)) {
+              return;
+            }
+
+            // Delete all nodes in this group
+            for (const node of nodesInGroup) {
+              deleteNode(node.id);
+              api.nodes.delete(node.id).catch(() => { });
+            }
+
+            // Delete all shapes/drawings in this group
+            for (const shape of shapesInGroup) {
+              deleteShape(shape.id);
+              api.drawings.delete(shape.id).catch(() => { });
+            }
+
+            // Delete the group locally
+            deleteGroup(id);
+
+            // Try backend delete silently, fall back to local hide
+            try {
+              await api.groups.delete(id);
+            } catch {
+              const hidden = JSON.parse(localStorage.getItem('nexus_hidden_groups') || '[]');
+              if (!hidden.includes(id)) {
+                hidden.push(id);
+                localStorage.setItem('nexus_hidden_groups', JSON.stringify(hidden));
+              }
+            }
+          }}
+          onReorderGroups={(newGroups) => {
+            setGroups(newGroups);
+            api.groups.reorder(newGroups.map(g => g.id))
+              .catch(err => console.warn("Backend sync failed (Reorder Groups):", err.message));
+          }}
+        />
+      </div>
 
       {isOutsideContent && (
         <button
@@ -2215,7 +2239,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
             graphRef.current.centerAt(centerX, centerY, 500);
             graphRef.current.zoom(1, 500);
           }}
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-sm border border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 transition-all"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-sm border border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 transition-all graph-ui-hide"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -2226,19 +2250,20 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
 
       <button
         onClick={() => setShowSelectionPane(!showSelectionPane)}
-        className={`absolute bottom-4 right-4 z-30 flex items-center gap-2 rounded-lg px-3 py-2 text-sm shadow-lg backdrop-blur-sm border transition-all ${showSelectionPane
+        className={`absolute bottom-4 right-4 z-30 flex items-center gap-2 rounded-lg px-3 py-2 text-sm shadow-lg backdrop-blur-sm border transition-all graph-ui-hide ${showSelectionPane
           ? 'bg-zinc-700 text-white border-zinc-600'
           : 'bg-zinc-800/90 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white hover:border-zinc-600'
           }`}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
         </svg>
-        Objects
+        {showSelectionPane ? 'Hide List' : 'Show List'}
       </button>
 
-      {
-        showSelectionPane && (
+      {/* Selection Pane */}
+      {showSelectionPane && (
+        <div className="graph-ui-hide">
           <SelectionPane
             isPreviewMode={graphSettings.isPreviewMode}
             nodes={nodes}
@@ -2252,9 +2277,15 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
                 graphRef.current.zoom(1.5, 500);
               }
             }}
-            onLocateShape={(shapeId, x, y) => {
-              if (graphRef.current) {
-                graphRef.current.centerAt(x, y, 500);
+            onLocateShape={(shapeId) => {
+              const shape = shapes.find(s => s.id === shapeId);
+              if (shape && graphRef.current) {
+                // Approximate center of shape
+                let cx = 0, cy = 0;
+                shape.points.forEach(p => { cx += p.x; cy += p.y; });
+                cx /= shape.points.length;
+                cy /= shape.points.length;
+                graphRef.current.centerAt(cx, cy, 500);
                 graphRef.current.zoom(1.5, 500);
               }
             }}
@@ -2281,18 +2312,18 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
               setSelectedShapeIds(new Set());
             }}
           />
-        )
-      }
+        </div>
+      )}
 
-      {
-        selectedLink && (
+      {selectedLink && (
+        <div className="graph-ui-hide">
           <ConnectionProperties
             link={selectedLink}
             onClose={() => setSelectedLink(null)}
           />
-        )
-      }
-    </div >
+        </div>
+      )}
+    </div>
   );
 });
 
