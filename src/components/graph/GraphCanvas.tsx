@@ -6,7 +6,7 @@ import { useGraphStore, filterNodes } from '@/store/useGraphStore';
 import { DrawingProperties } from './DrawingProperties';
 import { ConnectionProperties } from './ConnectionProperties';
 import { drawShapeOnContext, isPointNearShape, drawSelectionBox, isShapeInMarquee, drawMarquee } from './drawingUtils';
-import { getShapeBounds, drawResizeHandles, getHandleAtPoint, resizeShape, rotateShape, getCursorForHandle, ResizeHandle, ShapeBounds } from './resizeUtils';
+import { getShapeBounds, drawResizeHandles, getHandleAtPoint, resizeShape, rotateShape, getCursorForHandle, ResizeHandle, ShapeBounds, getResizeHandlePosition } from './resizeUtils';
 import { SelectionPane } from './SelectionPane';
 import { GroupsTabs, getNextGroupColor } from './GroupsTabs';
 import { DrawnShape } from '@/types/knowledge';
@@ -1016,7 +1016,22 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
 
     // Check if over a shape (let overlay handle)
     const isOverShape = filteredShapes.some(s => isPointNearShape(worldPoint, s, scale, 10));
-    if (isOverShape) return;
+
+    // Check if over a resize handle
+    let isOverHandle = false;
+    const currentSelectedIds = selectedShapeIdsRef.current;
+    if (currentSelectedIds.size === 1) {
+      const selectedShape = filteredShapes.find(s => currentSelectedIds.has(s.id));
+      if (selectedShape) {
+        const bounds = getShapeBounds(selectedShape);
+        if (bounds) {
+          const handle = getHandleAtPoint(worldPoint, bounds, scale);
+          if (handle) isOverHandle = true;
+        }
+      }
+    }
+
+    if (isOverShape || isOverHandle) return;
 
     // Check if we're clicking ON a node by examining coordinates
     // Find the closest node within hit radius (handles overlapping nodes)
@@ -1521,14 +1536,17 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
     const worldPoint = screenToWorld(screenX, screenY);
-    const scale = graphTransform.k || 1;
+    const scale = graphRef.current?.zoom() || graphTransform.k || 1;
 
-    if (selectedShapeIds.size === 1) {
-      const selectedShape = filteredShapes.find(s => selectedShapeIds.has(s.id));
+    const selectedIds = selectedShapeIdsRef.current;
+
+    if (selectedIds.size === 1) {
+      const selectedShape = filteredShapes.find(s => selectedIds.has(s.id));
       if (selectedShape) {
         const bounds = getShapeBounds(selectedShape);
         if (bounds) {
           const handle = getHandleAtPoint(worldPoint, bounds, scale);
+
           if (handle) {
             setIsResizing(true);
             activeResizeHandleRef.current = handle;

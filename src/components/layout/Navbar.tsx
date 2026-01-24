@@ -213,15 +213,15 @@ export function ProjectNavbar({ projectName, projectColor, nodeCount = 0, childr
         <div className="h-6 w-px bg-zinc-800" />
 
         <div className="flex items-center gap-2">
-          {projectColor && (
+          {/* {projectColor && (
             <div
               className="h-3 w-3 rounded-full"
               style={{ backgroundColor: projectColor }}
             />
-          )}
+          )} */}
           <div>
             <h1 className="text-sm font-semibold text-white">{projectName || 'Project'}</h1>
-            <p className="text-[10px] text-zinc-500">{nodeCount} nodes</p>
+            {/* <p className="text-[10px] text-zinc-500">{nodeCount} nodes</p> */}
           </div>
         </div>
       </div>

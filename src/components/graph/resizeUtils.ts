@@ -11,13 +11,22 @@ export interface ShapeBounds {
   height: number;
 }
 
-export function getShapeBounds(shape: DrawnShape): ShapeBounds | null {
+// Helper for text measurement
+const tempCtx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
+
+export function getShapeBounds(shape: DrawnShape, globalScale: number = 1): ShapeBounds | null {
   if (shape.points.length === 0) return null;
 
   if (shape.type === 'text' && shape.text) {
-    const fontSize = shape.fontSize || 16;
-    const textWidth = shape.text.length * fontSize * 0.6;
+    const fontSize = (shape.fontSize || 16) / globalScale;
+    let textWidth = shape.text.length * fontSize * 0.6; // Fallback
     const textHeight = fontSize * 1.2;
+
+    if (tempCtx) {
+        tempCtx.font = `${fontSize}px ${shape.fontFamily || 'Inter'}, sans-serif`;
+        const metrics = tempCtx.measureText(shape.text);
+        textWidth = metrics.width;
+    }
     
     return {
       minX: shape.points[0].x,
@@ -97,7 +106,6 @@ export function getHandleAtPoint(
   bounds: ShapeBounds,
   globalScale: number
 ): ResizeHandle | null {
-  const handleRadius = 8 / globalScale;
   const handles: ResizeHandle[] = ['rotate', 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'];
   
   for (const handle of handles) {
@@ -106,7 +114,10 @@ export function getHandleAtPoint(
     const dy = point.y - pos.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     
-    if (distance <= handleRadius) {
+    // Check radius based on handle type
+    const threshold = handle === 'rotate' ? 30 / globalScale : 10 / globalScale;
+    
+    if (distance <= threshold) {
       return handle;
     }
   }
@@ -205,7 +216,26 @@ export function rotateShape(
   const currentAngle = Math.atan2(currentPoint.y - centerY, currentPoint.x - centerX);
   const deltaAngle = currentAngle - startAngle;
   
-  const newPoints = shape.points.map(p => {
+  // If text has only 1 point, upgrade it to 2 points to support rotation
+  let pointsToRotate = shape.points;
+  if (shape.type === 'text' && shape.points.length === 1) {
+    pointsToRotate = [
+      shape.points[0],
+      { x: shape.points[0].x + 10, y: shape.points[0].y } // Initial horizontal vector
+    ];
+  } else if (shape.type === 'rectangle' && shape.points.length === 2) {
+    // Upgrade 2-point axis-aligned rect to 4-point polygon
+    const p0 = shape.points[0];
+    const p1 = shape.points[1];
+    pointsToRotate = [
+       { x: p0.x, y: p0.y },
+       { x: p1.x, y: p0.y },
+       { x: p1.x, y: p1.y },
+       { x: p0.x, y: p1.y }
+    ];
+  }
+
+  const newPoints = pointsToRotate.map(p => {
     const dx = p.x - centerX;
     const dy = p.y - centerY;
     const cos = Math.cos(deltaAngle);

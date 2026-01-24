@@ -79,9 +79,18 @@ export function drawShapeOnContext(
             break;
 
         case 'rectangle':
-            const rectWidth = points[1].x - points[0].x;
-            const rectHeight = points[1].y - points[0].y;
-            ctx.strokeRect(points[0].x, points[0].y, rectWidth, rectHeight);
+            if (points.length > 2) {
+                ctx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].y);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            } else {
+                const rectWidth = points[1].x - points[0].x;
+                const rectHeight = points[1].y - points[0].y;
+                ctx.strokeRect(points[0].x, points[0].y, rectWidth, rectHeight);
+            }
             break;
 
         case 'circle':
@@ -111,7 +120,17 @@ export function drawShapeOnContext(
                 ctx.font = `${fontSize}px ${shape.fontFamily || 'Inter'}, sans-serif`;
                 ctx.fillStyle = shape.color;
                 ctx.textBaseline = 'top';
-                ctx.fillText(shape.text, points[0].x, points[0].y);
+                
+                if (points.length >= 2) {
+                    const angle = Math.atan2(points[1].y - points[0].y, points[1].x - points[0].x);
+                    ctx.save();
+                    ctx.translate(points[0].x, points[0].y);
+                    ctx.rotate(angle);
+                    ctx.fillText(shape.text, 0, 0);
+                    ctx.restore();
+                } else {
+                    ctx.fillText(shape.text, points[0].x, points[0].y);
+                }
             }
             break;
     }
@@ -150,14 +169,22 @@ export function isPointNearShape(point: {x: number, y: number}, shape: DrawnShap
     return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
 }
 
-export function getShapeBounds(shape: DrawnShape, ctx?: CanvasRenderingContext2D): { minX: number; maxX: number; minY: number; maxY: number } | null {
+export function getShapeBounds(shape: DrawnShape, globalScale: number = 1, ctx?: CanvasRenderingContext2D): { minX: number; maxX: number; minY: number; maxY: number } | null {
     const { points } = shape;
     if (!points || points.length === 0) return null;
 
     if (shape.type === 'text' && shape.text && points.length > 0) {
-        const fontSize = shape.fontSize || 16;
-        const textWidth = shape.text.length * fontSize * 0.6;
+        const fontSize = (shape.fontSize || 16) / globalScale;
+        let textWidth = shape.text.length * fontSize * 0.6;
         const textHeight = fontSize * 1.2;
+        
+        if (ctx) {
+             ctx.save();
+             ctx.font = `${fontSize}px ${shape.fontFamily || 'Inter'}, sans-serif`;
+             const metrics = ctx.measureText(shape.text);
+             textWidth = metrics.width;
+             ctx.restore();
+        }
         
         return {
             minX: points[0].x,
@@ -179,7 +206,7 @@ export function getShapeBounds(shape: DrawnShape, ctx?: CanvasRenderingContext2D
 }
 
 export function drawSelectionBox(ctx: CanvasRenderingContext2D, shape: DrawnShape, globalScale: number) {
-    const bounds = getShapeBounds(shape, ctx);
+    const bounds = getShapeBounds(shape, globalScale, ctx);
     if (!bounds) return;
 
     const padding = 5 / globalScale;
@@ -205,7 +232,7 @@ export function drawSelectionBox(ctx: CanvasRenderingContext2D, shape: DrawnShap
     ctx.stroke();
     
     ctx.beginPath();
-    ctx.arc(centerX, rotationHandleY, 6 / globalScale, 0, 2 * Math.PI);
+    ctx.arc(centerX, rotationHandleY, 8 / globalScale, 0, 2 * Math.PI);
     ctx.fillStyle = '#FFFFFF';
     ctx.fill();
     ctx.strokeStyle = '#0D99FF';
