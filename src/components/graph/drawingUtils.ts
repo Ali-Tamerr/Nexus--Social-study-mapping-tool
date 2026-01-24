@@ -116,7 +116,7 @@ export function drawShapeOnContext(
 
         case 'text':
             if (shape.text && points.length > 0) {
-                const fontSize = (shape.fontSize || 16) / globalScale;
+                const fontSize = shape.fontSize || 16;
                 ctx.font = `${fontSize}px ${shape.fontFamily || 'Inter'}, sans-serif`;
                 ctx.fillStyle = shape.color;
                 ctx.textBaseline = 'top';
@@ -175,7 +175,7 @@ export function getShapeBounds(shape: DrawnShape, globalScale: number = 1, ctx?:
     if (!points || points.length === 0) return null;
 
     if (shape.type === 'text' && shape.text && points.length > 0) {
-        const fontSize = (shape.fontSize || 16) / globalScale;
+        const fontSize = shape.fontSize || 16;
         let textWidth = shape.text.length * fontSize * 0.6;
         const textHeight = fontSize * 1.2;
         

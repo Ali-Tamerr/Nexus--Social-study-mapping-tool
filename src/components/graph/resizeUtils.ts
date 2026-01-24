@@ -18,7 +18,7 @@ export function getShapeBounds(shape: DrawnShape, globalScale: number = 1): Shap
   if (shape.points.length === 0) return null;
 
   if (shape.type === 'text' && shape.text) {
-    const fontSize = (shape.fontSize || 16) / globalScale;
+    const fontSize = shape.fontSize || 16;
     let textWidth = shape.text.length * fontSize * 0.6; // Fallback
     const textHeight = fontSize * 1.2;
 

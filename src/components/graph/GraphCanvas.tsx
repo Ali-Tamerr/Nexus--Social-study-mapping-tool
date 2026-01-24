@@ -656,6 +656,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
   const originalShapeRef = useRef<DrawnShape | null>(null);
   const [hoveredResizeHandle, setHoveredResizeHandle] = useState<ResizeHandle | null>(null);
   const [resizeUpdateCounter, setResizeUpdateCounter] = useState(0);
+  const [editingShapeId, setEditingShapeId] = useState<string | null>(null);
 
   const [isMiddleMousePanning, setIsMiddleMousePanning] = useState(false);
   const middleMouseStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -771,6 +772,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     }
     return shapes.filter(s => s.groupId === activeGroupId);
   }, [shapes, activeGroupId]);
+
+  const editingShape = useMemo(() => {
+    return editingShapeId ? shapes.find(s => s.id === editingShapeId) : null;
+  }, [shapes, editingShapeId]);
+
   // On group load, delete any nodes/drawings with a groupId not in the current group list
   useEffect(() => {
     if (!groups || groups.length === 0) return;
@@ -1489,6 +1495,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
   const onRenderFramePost = useCallback((ctx: CanvasRenderingContext2D, globalScale: number) => {
     const renderShapes = shapesRef.current;
     renderShapes.forEach(shape => {
+      if (shape.id === editingShapeId) return;
       drawShapeOnContext(ctx, shape, globalScale);
       if (selectedShapeIds.has(shape.id)) {
         drawSelectionBox(ctx, shape, globalScale);
@@ -1517,7 +1524,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     if (isMarqueeSelecting && marqueeStart && marqueeEnd) {
       drawMarquee(ctx, marqueeStart, marqueeEnd, globalScale);
     }
-  }, [filteredShapes, isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, selectedShapeIds, isMarqueeSelecting, marqueeStart, marqueeEnd, isResizing, resizeUpdateCounter, drawPreview, currentProject?.id, shapeToApiDrawing, addShape]);
+  }, [filteredShapes, isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, selectedShapeIds, isMarqueeSelecting, marqueeStart, marqueeEnd, isResizing, resizeUpdateCounter, drawPreview, currentProject?.id, shapeToApiDrawing, addShape, editingShapeId]);
 
   const handleSelectMouseDown = useCallback((e: React.MouseEvent) => {
     if (!isSelectTool) return;
@@ -1943,8 +1950,30 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
                 const screenX = e.clientX - rect.left;
                 const screenY = e.clientY - rect.top;
                 const worldPoint = screenToWorld(screenX, screenY);
-                setTextInputPos({ x: e.clientX, y: e.clientY, worldX: worldPoint.x, worldY: worldPoint.y });
-                setTextInputValue('');
+                const scale = graphRef.current?.zoom() || graphTransform.k || 1;
+
+                // Check if we clicked on an existing text shape
+                const clickedTextShape = [...filteredShapes].reverse().find(s =>
+                  s.type === 'text' && isPointNearShape(worldPoint, s, scale, 10)
+                );
+
+                if (clickedTextShape && graphRef.current) {
+                  setEditingShapeId(clickedTextShape.id);
+                  setTextInputValue(clickedTextShape.text || '');
+
+                  // Position input at shape anchor
+                  const screenPos = graphRef.current.graph2ScreenCoords(clickedTextShape.points[0].x, clickedTextShape.points[0].y);
+                  setTextInputPos({
+                    x: screenPos.x + rect.left,
+                    y: screenPos.y + rect.top,
+                    worldX: clickedTextShape.points[0].x,
+                    worldY: clickedTextShape.points[0].y
+                  });
+                } else {
+                  setEditingShapeId(null);
+                  setTextInputPos({ x: e.clientX, y: e.clientY, worldX: worldPoint.x, worldY: worldPoint.y });
+                  setTextInputValue('');
+                }
               }}
             />
           )}
@@ -1961,28 +1990,37 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && textInputValue.trim()) {
                     e.preventDefault();
-                    const newShape: DrawnShape = {
-                      id: crypto.randomUUID(),
-                      type: 'text',
-                      points: [{ x: textInputPos.worldX, y: textInputPos.worldY }],
-                      color: graphSettings.strokeColor,
-                      width: 0,
-                      style: 'solid',
-                      text: textInputValue.trim(),
-                      fontSize: graphSettings.fontSize || 16,
-                      fontFamily: graphSettings.fontFamily || 'Inter',
-                      groupId: activeGroupId ?? undefined,
-                    };
-                    addShape(newShape);
-                    if (currentProject?.id) {
-                      api.drawings.create(shapeToApiDrawing(newShape, currentProject.id, activeGroupId ?? undefined))
-                        .then(createdDrawing => {
-                          updateShape(newShape.id, { id: createdDrawing.id });
-                        })
-                        .catch(err => console.error('Failed to save text:', err));
+
+                    if (editingShapeId) {
+                      updateShape(editingShapeId, { text: textInputValue.trim() });
+                      api.drawings.update(editingShapeId, { text: textInputValue.trim() })
+                        .catch(err => console.error('Failed to update drawing:', err));
+                    } else {
+                      const newShape: DrawnShape = {
+                        id: crypto.randomUUID(),
+                        type: 'text',
+                        points: [{ x: textInputPos.worldX, y: textInputPos.worldY }],
+                        color: graphSettings.strokeColor,
+                        width: 0,
+                        style: 'solid',
+                        text: textInputValue.trim(),
+                        fontSize: graphSettings.fontSize || 16,
+                        fontFamily: graphSettings.fontFamily || 'Inter',
+                        groupId: activeGroupId ?? undefined,
+                      };
+                      addShape(newShape);
+                      if (currentProject?.id) {
+                        api.drawings.create(shapeToApiDrawing(newShape, currentProject.id, activeGroupId ?? undefined))
+                          .then(createdDrawing => {
+                            updateShape(newShape.id, { id: createdDrawing.id });
+                          })
+                          .catch(err => console.error('Failed to create drawing:', err));
+                      }
                     }
+
                     setTextInputPos(null);
                     setTextInputValue('');
+                    setEditingShapeId(null);
                     setTimeout(() => {
                       if (graphRef.current) {
                         const z = graphRef.current.zoom();
@@ -1993,46 +2031,55 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
                   } else if (e.key === 'Escape') {
                     setTextInputPos(null);
                     setTextInputValue('');
+                    setEditingShapeId(null);
                   }
                 }}
                 onBlur={() => {
                   if (textInputValue.trim()) {
-                    const newShape: DrawnShape = {
-                      id: crypto.randomUUID(),
-                      type: 'text',
-                      points: [{ x: textInputPos.worldX, y: textInputPos.worldY }],
-                      color: graphSettings.strokeColor,
-                      width: 0,
-                      style: 'solid',
-                      text: textInputValue.trim(),
-                      fontSize: graphSettings.fontSize || 16,
-                      fontFamily: graphSettings.fontFamily || 'Inter',
-                      groupId: activeGroupId ?? undefined,
-                    };
-                    addShape(newShape);
-                    if (currentProject?.id) {
-                      api.drawings.create(shapeToApiDrawing(newShape, currentProject.id, activeGroupId ?? undefined))
-                        .then(createdDrawing => {
-                          updateShape(newShape.id, { id: createdDrawing.id });
-                        })
-                        .catch(err => console.error('Failed to save text:', err));
-                    }
-                    setTimeout(() => {
-                      if (graphRef.current) {
-                        const z = graphRef.current.zoom();
-                        graphRef.current.zoom(z * 1.00001, 0);
-                        graphRef.current.zoom(z, 0);
+                    if (editingShapeId) {
+                      updateShape(editingShapeId, { text: textInputValue.trim() });
+                      api.drawings.update(editingShapeId, { text: textInputValue.trim() })
+                        .catch(err => console.error('Failed to update drawing:', err));
+                    } else {
+                      const newShape: DrawnShape = {
+                        id: crypto.randomUUID(),
+                        type: 'text',
+                        points: [{ x: textInputPos.worldX, y: textInputPos.worldY }],
+                        color: graphSettings.strokeColor,
+                        width: 0,
+                        style: 'solid',
+                        text: textInputValue.trim(),
+                        fontSize: graphSettings.fontSize || 16,
+                        fontFamily: graphSettings.fontFamily || 'Inter',
+                        groupId: activeGroupId ?? undefined,
+                      };
+                      addShape(newShape);
+                      if (currentProject?.id) {
+                        api.drawings.create(shapeToApiDrawing(newShape, currentProject.id, activeGroupId ?? undefined))
+                          .then(createdDrawing => {
+                            updateShape(newShape.id, { id: createdDrawing.id });
+                          })
+                          .catch(err => console.error('Failed to create drawing:', err));
                       }
-                    }, 50);
+                    }
                   }
                   setTextInputPos(null);
                   setTextInputValue('');
+                  setEditingShapeId(null);
+                  setTimeout(() => {
+                    if (graphRef.current) {
+                      const z = graphRef.current.zoom();
+                      graphRef.current.zoom(z * 1.00001, 0);
+                      graphRef.current.zoom(z, 0);
+                    }
+                  }, 50);
                 }}
-                className="bg-transparent border-none outline-none text-white min-w-[100px]"
+                className="bg-transparent border-none outline-none text-white min-w-[100px] p-0 m-0"
                 style={{
-                  fontSize: graphSettings.fontSize || 16,
-                  fontFamily: graphSettings.fontFamily || 'Inter',
-                  color: graphSettings.strokeColor,
+                  fontSize: ((editingShape?.fontSize || graphSettings.fontSize || 16) * (graphTransform.k || 1)),
+                  fontFamily: editingShape?.fontFamily || graphSettings.fontFamily || 'Inter',
+                  color: editingShape?.color || graphSettings.strokeColor,
+                  lineHeight: 1.2,
                 }}
                 placeholder="Type here..."
               />
