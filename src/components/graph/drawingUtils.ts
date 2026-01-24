@@ -149,25 +149,15 @@ function distanceToSegment(p: {x: number, y: number}, a: {x: number, y: number},
 }
 
 export function isPointNearShape(point: {x: number, y: number}, shape: DrawnShape, globalScale = 1, tolerance = 25): boolean {
-    const { type, points } = shape;
-    if (!points || points.length === 0) return false;
+    const bounds = getShapeBounds(shape, globalScale);
+    if (!bounds) return false;
 
     const margin = tolerance / globalScale;
 
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const p of points) {
-        minX = Math.min(minX, p.x);
-        maxX = Math.max(maxX, p.x);
-        minY = Math.min(minY, p.y);
-        maxY = Math.max(maxY, p.y);
-    }
-
-    minX -= margin;
-    maxX += margin;
-    minY -= margin;
-    maxY += margin;
-
-    return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+    return point.x >= bounds.minX - margin && 
+           point.x <= bounds.maxX + margin && 
+           point.y >= bounds.minY - margin && 
+           point.y <= bounds.maxY + margin;
 }
 
 export function getShapeBounds(shape: DrawnShape, globalScale: number = 1, ctx?: CanvasRenderingContext2D): { minX: number; maxX: number; minY: number; maxY: number } | null {
