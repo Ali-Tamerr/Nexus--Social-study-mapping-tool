@@ -1653,6 +1653,14 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       api.drawings.create(shapeToApiDrawing(newShape, currentProject.id, activeGroupId ?? undefined))
         .then(createdDrawing => {
           updateShape(newShape.id, { id: createdDrawing.id, synced: true });
+          setSelectedShapeIds(prev => {
+            const next = new Set(prev);
+            if (next.has(newShape.id)) {
+              next.delete(newShape.id);
+              next.add(createdDrawing.id);
+            }
+            return next;
+          });
         })
         .catch(err => console.error('Failed to save drawing:', err));
     }
