@@ -117,6 +117,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }: AuthModalP
             password: randomPassword,
             displayName: userInfo.name,
             avatarUrl: userInfo.picture,
+            provider: 'google',
           });
 
           // console.log('[Google Auth] Registered new profile:', newProfile);
@@ -164,6 +165,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login' }: AuthModalP
           email,
           password,
           displayName: displayName || undefined,
+          provider: 'email',
         });
         login(profile);
         onClose();

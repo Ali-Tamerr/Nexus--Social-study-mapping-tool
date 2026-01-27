@@ -142,6 +142,7 @@ export interface RegisterRequest {
   displayName?: string;
   avatarUrl?: string;
   password: string;
+  provider?: 'email' | 'google';
 }
 
 export { GROUP_COLORS, BRAND_COLOR, NODE_COLORS, COLOR_PALETTE } from '@/lib/constants';

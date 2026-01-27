@@ -25,6 +25,7 @@ export async function POST(req: Request) {
         Password: body.password,
         DisplayName: body.displayName,
         AvatarUrl: body.avatarUrl ?? null,
+        Provider: body.provider,
       }),
     });
 
