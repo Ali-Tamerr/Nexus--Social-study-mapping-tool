@@ -75,14 +75,15 @@ export function NodeEditor() {
     if (activeNode) {
       setTitle(activeNode.title);
       setContent(activeNode.content || '');
-      setCustomColor(activeNode.customColor);
+      // Ensure null becomes undefined for the state
+      setCustomColor(activeNode.customColor || undefined);
     }
   }, [activeNode]);
 
   // Capture original color when node/selection changes
   useEffect(() => {
     if (activeNode?.id) {
-      originalColorRef.current = activeNode.customColor;
+      originalColorRef.current = activeNode.customColor || undefined;
     }
   }, [activeNode?.id]);
 

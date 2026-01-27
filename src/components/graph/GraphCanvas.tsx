@@ -18,6 +18,7 @@ const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
 }) as any;
 
 import { forwardRef, useImperativeHandle } from 'react';
+import { LoadingOverlay } from '../ui';
 
 export type GraphCanvasHandle = {
   exportToPNG: () => void;
@@ -276,6 +277,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
   const lastDragTimeRef = useRef(0);
   const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const wasGlobalDragRef = useRef(false);
+  const isMarqueeSelectingRef = useRef(false);
 
   const handleNodeClick = useCallback(
     (nodeObj: { id?: string | number; x?: number; y?: number }, event: MouseEvent) => {
@@ -518,15 +520,15 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
 
   const shapeToApiDrawing = useCallback((s: DrawnShape, projectId: number, groupId?: number) => ({
     projectId,
-    groupId: groupId ?? s.groupId,
+    groupId: groupId ?? s.groupId ?? undefined,
     type: s.type,
     points: s.points,
     color: s.color,
     width: s.width,
     style: s.style,
-    text: s.text,
-    fontSize: s.fontSize,
-    fontFamily: s.fontFamily,
+    text: s.text ?? undefined,
+    fontSize: s.fontSize ?? undefined,
+    fontFamily: s.fontFamily ?? undefined,
   }), []);
 
   useEffect(() => {
@@ -870,9 +872,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       useGraphStore.getState().setNodes(validNodes);
     }
     // Remove shapes with invalid groupId
-    const validShapes = shapes.filter(s => s.groupId === undefined || validGroupIds.has(s.groupId));
+    const validShapes = shapes.filter(s => s.groupId === undefined || s.groupId === null || validGroupIds.has(s.groupId));
     if (validShapes.length !== shapes.length) {
-      const toDelete = shapes.filter(s => s.groupId !== undefined && !validGroupIds.has(s.groupId));
+      const toDelete = shapes.filter(s => s.groupId !== undefined && s.groupId !== null && !validGroupIds.has(s.groupId));
       toDelete.forEach(s => {
         api.drawings.delete(s.id).catch(
           // err => console.error('Failed to delete drawing with invalid group:', err)
@@ -1127,7 +1129,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     }
 
     // 5. Marquee selection update
-    if (isMarqueeSelecting) {
+    if (isMarqueeSelecting || isMarqueeSelectingRef.current) {
       const rect = e.currentTarget.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
@@ -1281,6 +1283,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       setSelectedShapeIds(new Set());
       setSelectedNodeIds(new Set());
     }
+    isMarqueeSelectingRef.current = true;
     setIsMarqueeSelecting(true);
     setMarqueeStart(worldPoint);
     setMarqueeEnd(worldPoint);
@@ -1358,7 +1361,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     }
 
     // Finalize marquee selection
-    if (isMarqueeSelecting && marqueeStart && marqueeEnd) {
+    if ((isMarqueeSelecting || isMarqueeSelectingRef.current) && marqueeStart && marqueeEnd) {
       const minX = Math.min(marqueeStart.x, marqueeEnd.x);
       const maxX = Math.max(marqueeStart.x, marqueeEnd.x);
       const minY = Math.min(marqueeStart.y, marqueeEnd.y);
@@ -1385,6 +1388,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       setSelectedNodeIds(newSelectedNodes);
       setSelectedShapeIds(newSelectedShapes);
       setIsMarqueeSelecting(false);
+      isMarqueeSelectingRef.current = false;
       setMarqueeStart(null);
       setMarqueeEnd(null);
     }
@@ -1639,9 +1643,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       if (remaining.length !== shapes.length) {
         setShapes(remaining);
         erasedShapes.forEach(s => {
-          api.drawings.delete(s.id).catch(
-            // err => console.error('Failed to delete drawing:', err)
-          );
+          if (s.id > 0) {
+            api.drawings.delete(s.id).catch(
+              // err => console.error('Failed to delete drawing:', err)
+            );
+          }
         });
       }
       return;
@@ -1845,6 +1851,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
         setSelectedShapeIds(new Set());
         setSelectedNodeIds(new Set());
       }
+      isMarqueeSelectingRef.current = true;
       setIsMarqueeSelecting(true);
       setMarqueeStart(worldPoint);
       setMarqueeEnd(worldPoint);
@@ -2193,12 +2200,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
           </div>
         </>
       ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#265fbd]/30 border-t-[#265fbd]" />
-            <span className="text-sm text-zinc-400">Loading graph...</span>
-          </div>
-        </div>
+        <LoadingOverlay message="Loading graph..." />
       )}
 
 

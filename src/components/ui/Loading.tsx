@@ -35,10 +35,11 @@ export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerPr
   const sizeClasses = {
     sm: 'h-4 w-4',
     md: 'h-6 w-6',
-    lg: 'h-8 w-8',
+    lg: 'h-10 w-10',
   };
 
-  return <Loader2 className={`animate-spin text-[#355ea1] ${sizeClasses[size]} ${className}`} />;
+  return <NextImage src={NexusLogo} alt="Loading..."  className={`object-contain animate-spin ${sizeClasses[size]} ${className} `}  />;
+
 }
 
 interface LoadingOverlayProps {
@@ -47,7 +48,7 @@ interface LoadingOverlayProps {
 
 export function LoadingOverlay({ message = 'Loading...' }: LoadingOverlayProps) {
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className="flex h-full w-full items-center justify-center">
       <div className="flex flex-col items-center gap-4">
         <LoadingSpinner size="lg" />
         <p className="text-sm text-zinc-400">{message}</p>

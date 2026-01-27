@@ -305,12 +305,15 @@ export const api = {
       fontFamily?: string;
       groupId?: number;
     }) => {
-      // API expects Points as a JSON string
+      // API expects Points as a JSON array now
       const payload = {
         ...data,
-        points: JSON.stringify(data.points)
       };
-      // We know response will have string points, we should parse it back for the frontend
+      
+      // We know response defines points as object/array from backend now (based on GET)
+      // but let's keep the parse check in case backend still sends string for some reason 
+      // or if we need to be safe. Actually, the GET methods handle the parsing.
+      // fetchApiWithBody generic T is return type.
       return fetchApiWithBody<any>('/api/drawings', 'POST', payload)
         .then(d => ({
           ...d,
@@ -331,10 +334,7 @@ export const api = {
     }>) => {
       const payload = {
         ...data,
-      } as any;
-      if (data.points) {
-        payload.points = JSON.stringify(data.points);
-      }
+      };
       return fetchApiWithBody<any>(`/api/drawings/${id}`, 'PUT', payload)
         .then(d => ({
             ...d,
