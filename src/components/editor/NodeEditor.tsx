@@ -146,7 +146,7 @@ export function NodeEditor() {
       originalColorRef.current = customColor;
 
       setSearchQuery(''); // Clear search to ensure node remains visible (renaming might break search match)
-      showToast('Node saved successfully', );
+      showToast('Node saved successfully',);
       toggleEditor(false);
     } catch (err) {
       // console.error('Failed to save node:', err);
@@ -167,7 +167,7 @@ export function NodeEditor() {
       await api.nodes.delete(activeNode.id);
       deleteNode(activeNode.id);
       toggleEditor(false);
-      showToast('Node deleted successfully', 'success');
+      showToast('Node deleted successfully',);
     } catch (err) {
       // console.error('Failed to delete node:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete');

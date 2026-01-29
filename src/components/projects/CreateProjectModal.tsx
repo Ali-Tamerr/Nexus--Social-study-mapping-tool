@@ -20,7 +20,7 @@ export function CreateProjectModal({ isOpen, onClose, onSubmit, loading }: Creat
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
-    
+
     await onSubmit({
       name: name.trim(),
       description: description.trim() || undefined,
@@ -51,6 +51,12 @@ export function CreateProjectModal({ isOpen, onClose, onSubmit, loading }: Creat
           onChange={(e) => setName(e.target.value)}
           placeholder="My Knowledge Graph"
           autoFocus
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && name.trim()) {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
         />
 
         <TextArea

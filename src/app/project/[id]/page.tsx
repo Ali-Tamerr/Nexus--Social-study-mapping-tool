@@ -149,29 +149,23 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     try {
       let groupId = 0;
       try {
-        const groups = await api.groups.getAll();
+        const groups = await api.groups.getByProject(currentProject!.id);
         if (groups && groups.length > 0) {
           groupId = groups[0].id;
-        } else {
-          // Try to create default group if none exist?
-          // console.warn('No groups found, defaulting to 0');
         }
       } catch (err) {
-        // console.error('Failed to fetch groups:', err);
       }
 
-      // If still 0, try to create a default group
       if (groupId === 0) {
         try {
           const newGroup = await api.groups.create({
             name: 'Default',
             color: '#808080',
-            order: 0
+            order: 0,
+            projectId: currentProject!.id
           });
           if (newGroup) groupId = newGroup.id;
         } catch (e) {
-          // If even creation fails, we can't do much but try 0 or 1
-          // console.error('Failed to create default group:', e);
         }
       }
 

@@ -577,26 +577,26 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       .catch(() => { });
   }, [currentProject?.id, apiDrawingToShape, setShapes]);
 
-  const groupsLoadedRef = useRef(false);
+  const lastLoadedProjectIdRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (groupsLoadedRef.current) return;
-    groupsLoadedRef.current = true;
+    if (!currentProject?.id) return;
+    if (lastLoadedProjectIdRef.current === currentProject.id) return;
+    lastLoadedProjectIdRef.current = currentProject.id;
 
-    // Color names that should be renamed to "Group X"
+    setGroups([]);
+
     const colorNames = ['violet', 'blue', 'green', 'yellow', 'red', 'pink', 'cyan', 'lime', 'orange', 'purple', 'teal', 'amber', 'emerald', 'sky', 'indigo', 'rose', 'fuchsia'];
 
-    api.groups.getAll()
+    api.groups.getByProject(currentProject.id)
       .then((backendGroups) => {
         const hidden = JSON.parse(localStorage.getItem('nexus_hidden_groups') || '[]');
         const visibleGroups = backendGroups.filter(g => !hidden.includes(g.id));
 
         const groupsWithOrder = visibleGroups.map((g, i) => {
-          // Rename color-named groups to "Group X"
           const isColorName = colorNames.includes(g.name.toLowerCase());
           const newName = isColorName ? `Group ${i + 1}` : g.name;
 
-          // If renaming, also update backend (skip default group 0)
           if (isColorName && g.name !== newName && g.id !== 0) {
             api.groups.update(g.id, { name: newName })
               .catch(() => { });
@@ -611,7 +611,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
         }
       })
       .catch(() => { });
-  }, [setGroups, setActiveGroupId]);
+  }, [setGroups, setActiveGroupId, currentProject?.id]);
 
   // Update selected shapes when settings change
   useEffect(() => {
@@ -959,14 +959,70 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     }
   }, [activeGroupId]);
 
+  const syncUndoRedo = useCallback(async (isUndo: boolean) => {
+    const state = useGraphStore.getState();
+    const oldShapes = state.shapes;
+    const stack = isUndo ? state.undoStack : state.redoStack;
+    if (stack.length === 0) return;
+
+    const targetShapes = stack[stack.length - 1];
+
+    if (isUndo) {
+      undo();
+    } else {
+      redo();
+    }
+
+    const oldIds = new Set(oldShapes.map(s => s.id));
+    const newIds = new Set(targetShapes.map(s => s.id));
+
+    const reappeared = targetShapes.filter(s => !oldIds.has(s.id));
+    const disappeared = oldShapes.filter(s => !newIds.has(s.id));
+
+    for (const shape of disappeared) {
+      try {
+        await api.drawings.delete(shape.id);
+      } catch { }
+    }
+
+    const idMap = new Map<number, number>();
+    for (const shape of reappeared) {
+      try {
+        const payload = {
+          projectId: shape.projectId!,
+          type: shape.type as string,
+          points: shape.points,
+          color: shape.color,
+          width: shape.width,
+          style: shape.style as string,
+          text: shape.text ?? undefined,
+          fontSize: shape.fontSize ?? undefined,
+          fontFamily: shape.fontFamily ?? undefined,
+          groupId: shape.groupId ?? undefined,
+        };
+        const newShape = await api.drawings.create(payload);
+        idMap.set(shape.id, newShape.id);
+      } catch { }
+    }
+
+    if (idMap.size > 0) {
+      const currentShapes = useGraphStore.getState().shapes;
+      const updatedShapes = currentShapes.map(s => {
+        const newId = idMap.get(s.id);
+        return newId !== undefined ? { ...s, id: newId } : s;
+      });
+      setShapes(updatedShapes);
+    }
+  }, [undo, redo, setShapes]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        undo();
+        syncUndoRedo(true);
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
         e.preventDefault();
-        redo();
+        syncUndoRedo(false);
       } else if ((e.key === 'Delete' || e.key === 'Backspace')) {
         // Don't delete if typing in an input
         const activeElement = document.activeElement;
@@ -1029,27 +1085,23 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
           e.preventDefault();
           const { nodes: cpNodes, shapes: cpShapes } = clipboardRef.current;
           const { currentProject } = useGraphStore.getState();
-          const currentUserId = useGraphStore.getState().currentUserId; // Ensure we have this
+          const currentUserId = useGraphStore.getState().currentUserId;
 
           if (!currentProject) return;
 
-          // Deselect all
           setSelectedNodeIds(new Set());
           setSelectedShapeIds(new Set());
 
-          const newSelectedNodes = new Set<number>();
-          const newSelectedShapes = new Set<number>();
-          const offset = 20;
+          const offset = 50;
 
-          // Paste Nodes
-          cpNodes.forEach(async (n: any) => {
+          const nodePromises = cpNodes.map(async (n: any) => {
             try {
               const payload = {
                 title: n.title,
                 content: n.content || '',
-                projectId: currentProject.id, // Paste into current project
-                groupId: n.groupId, // Keep group? If cross-project paste, this might default to 0. 
-                userId: currentUserId || n.userId, // Use current user
+                projectId: currentProject.id,
+                groupId: n.groupId,
+                userId: currentUserId || n.userId,
                 customColor: n.customColor,
                 x: (n.x || 0) + offset,
                 y: (n.y || 0) + offset,
@@ -1057,14 +1109,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
 
               const newNode = await api.nodes.create(payload);
               useGraphStore.getState().addNode(newNode);
-              newSelectedNodes.add(newNode.id);
-              // Force update selections after async
-              setSelectedNodeIds(prev => new Set([...prev, newNode.id]));
-            } catch (err) { }
+              return newNode.id;
+            } catch (err) { return null; }
           });
 
-          // Paste Shapes
-          cpShapes.forEach(async (s) => {
+          const shapePromises = cpShapes.map(async (s: any) => {
             try {
               const newPoints = s.points.map((p: any) => ({ x: p.x + offset, y: p.y + offset }));
               const payload = {
@@ -1082,11 +1131,28 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
 
               const newShape = await api.drawings.create(payload);
               useGraphStore.getState().addShape(newShape);
-              newSelectedShapes.add(newShape.id);
-              // Force update selection
-              setSelectedShapeIds(prev => new Set([...prev, newShape.id]));
-            } catch (err) { }
+              return newShape.id;
+            } catch (err) { return null; }
           });
+
+          Promise.all([...nodePromises, ...shapePromises]).then((ids) => {
+            const nodeIds = ids.slice(0, cpNodes.length).filter((id): id is number => id !== null);
+            const shapeIds = ids.slice(cpNodes.length).filter((id): id is number => id !== null);
+            setSelectedNodeIds(new Set(nodeIds));
+            setSelectedShapeIds(new Set(shapeIds));
+          });
+
+          clipboardRef.current = {
+            nodes: cpNodes.map((n: any) => ({
+              ...n,
+              x: (n.x || 0) + offset,
+              y: (n.y || 0) + offset,
+            })),
+            shapes: cpShapes.map((s: any) => ({
+              ...s,
+              points: s.points.map((p: any) => ({ x: p.x + offset, y: p.y + offset })),
+            })),
+          };
         }
       } else if (e.key === 'Escape') {
         setSelectedShapeIds(new Set());
@@ -1853,10 +1919,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
         let groupId = activeGroupId;
         if (!groupId || groupId === 0) {
           try {
-            const groups = await api.groups.getAll();
+            const groups = await api.groups.getByProject(currentProject.id);
             if (groups && groups.length > 0) groupId = groups[0].id;
             else {
-              const newGroup = await api.groups.create({ name: 'Default', color: '#808080', order: 0 });
+              const newGroup = await api.groups.create({ name: 'Default', color: '#808080', order: 0, projectId: currentProject.id });
               if (newGroup) groupId = newGroup.id;
             }
           } catch (e) { }
@@ -2441,10 +2507,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
                           let groupId = activeGroupId;
                           if (!groupId || groupId === 0) {
                             try {
-                              const groups = await api.groups.getAll();
+                              const groups = await api.groups.getByProject(currentProject.id);
                               if (groups && groups.length > 0) groupId = groups[0].id;
                               else {
-                                const newGroup = await api.groups.create({ name: 'Default', color: '#808080', order: 0 });
+                                const newGroup = await api.groups.create({ name: 'Default', color: '#808080', order: 0, projectId: currentProject.id });
                                 if (newGroup) groupId = newGroup.id;
                               }
                             } catch (e) { }
@@ -2517,7 +2583,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
                     setEditingShapeId(null);
                     setTextInputPos(null);
                   }
-                  showToast("Deleted successfully", "success");
+                  showToast("Deleted successfully");
                 }
               }}
             />
@@ -2538,7 +2604,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
             const newColor = getNextGroupColor(groups);
 
             try {
-              const newGroup = await api.groups.create({ name: newName, color: newColor });
+              const newGroup = await api.groups.create({ name: newName, color: newColor, projectId: currentProject!.id });
               const groupWithOrder = { ...newGroup, order: groups.length };
               addGroup(groupWithOrder);
               setActiveGroupId(newGroup.id);
@@ -2662,6 +2728,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
         onClick={() => setShowSelectionPane(!showSelectionPane)}
         onMouseDown={(e) => e.stopPropagation()}
         className={`absolute bottom-4 right-4 z-30 flex items-center gap-2 rounded-lg px-3 h-9 text-sm shadow-lg backdrop-blur-sm border transition-all graph-ui-hide ${showSelectionPane
+
           ? 'bg-zinc-700 text-white border-zinc-600'
           : 'bg-zinc-800/90 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white hover:border-zinc-600'
           }`}

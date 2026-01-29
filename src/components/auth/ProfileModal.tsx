@@ -121,7 +121,7 @@ export function ProfileModal({ isOpen, onClose, initialMode = 'edit_profile' }: 
             if ('password' in mergedUser) delete (mergedUser as any).password;
 
             login(mergedUser);
-            showToast('Password updated successfully', 'success');
+            showToast('Password updated successfully',);
             onClose();
         } catch (error) {
             showToast(getFriendlyErrorMessage(error), 'error');

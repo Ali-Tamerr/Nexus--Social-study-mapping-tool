@@ -129,7 +129,7 @@ export default function HomePage() {
       await api.projects.update(editingProject.id, updatedProject);
       setProjects(projects.map(p => p.id === editingProject.id ? updatedProject : p));
       setEditingProject(null);
-      showToast('Project updated successfully', );
+      showToast('Project updated successfully',);
     } catch (err) {
       console.error('Failed to update project:', err);
       showToast(getFriendlyErrorMessage(err), 'error');
@@ -147,7 +147,7 @@ export default function HomePage() {
     try {
       await api.projects.delete(project.id);
       deleteProject(project.id);
-      showToast('Project deleted', 'success');
+      showToast('Project deleted',);
     } catch (err) {
       console.error('Failed to delete project:', err);
       deleteProject(project.id);

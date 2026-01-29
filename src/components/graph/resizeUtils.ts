@@ -256,22 +256,31 @@ export function resizeShape(
       newMinY = startBounds.minY + dy;
       break;
   }
-  
-  const MIN_SIZE = 20;
-  if (newMaxX - newMinX < MIN_SIZE) {
-    if (handle.includes('e')) {
-      newMaxX = newMinX + MIN_SIZE;
-    } else if (handle.includes('w')) {
-      newMinX = newMaxX - MIN_SIZE;
-    }
-  }
-  
-  if (newMaxY - newMinY < MIN_SIZE) {
-    if (handle.includes('s')) {
-      newMaxY = newMinY + MIN_SIZE;
-    } else if (handle.includes('n')) {
-      newMinY = newMaxY - MIN_SIZE;
-    }
+
+  const scaleX = startBounds.width > 0 ? (newMaxX - newMinX) / startBounds.width : 1;
+  const scaleY = startBounds.height > 0 ? (newMaxY - newMinY) / startBounds.height : 1;
+
+  if (shape.type === 'circle' && shape.points.length > 2) {
+    const p0 = shape.points[0];
+    const p2 = shape.points[2];
+    const oldCenterX = (p0.x + p2.x) / 2;
+    const oldCenterY = (p0.y + p2.y) / 2;
+
+    const oldRelCX = startBounds.width > 0 ? (oldCenterX - startBounds.minX) / startBounds.width : 0.5;
+    const oldRelCY = startBounds.height > 0 ? (oldCenterY - startBounds.minY) / startBounds.height : 0.5;
+    const newCenterX = newMinX + oldRelCX * (newMaxX - newMinX);
+    const newCenterY = newMinY + oldRelCY * (newMaxY - newMinY);
+
+    const newPoints = shape.points.map(p => {
+      const offsetX = p.x - oldCenterX;
+      const offsetY = p.y - oldCenterY;
+      return {
+        x: newCenterX + offsetX * scaleX,
+        y: newCenterY + offsetY * scaleY,
+      };
+    });
+
+    return { ...shape, points: newPoints };
   }
   
   const newPoints = shape.points.map(p => {
@@ -295,8 +304,25 @@ export function rotateShape(
   startPoint: { x: number; y: number },
   bounds: ShapeBounds
 ): DrawnShape {
-  const centerX = bounds.minX + bounds.width / 2;
-  const centerY = bounds.minY + bounds.height / 2;
+  let centerX = bounds.minX + bounds.width / 2;
+  let centerY = bounds.minY + bounds.height / 2;
+
+  if ((shape.type === 'arrow' || shape.type === 'line') && shape.points.length === 2) {
+    centerX = (shape.points[0].x + shape.points[1].x) / 2;
+    centerY = (shape.points[0].y + shape.points[1].y) / 2;
+  }
+
+  if (shape.type === 'circle' && shape.points.length >= 4) {
+    const p0 = shape.points[0];
+    const p2 = shape.points[2];
+    centerX = (p0.x + p2.x) / 2;
+    centerY = (p0.y + p2.y) / 2;
+  } else if (shape.type === 'circle' && shape.points.length === 2) {
+    const p0 = shape.points[0];
+    const p1 = shape.points[1];
+    centerX = (p0.x + p1.x) / 2;
+    centerY = (p0.y + p1.y) / 2;
+  }
   
   const startAngle = Math.atan2(startPoint.y - centerY, startPoint.x - centerX);
   const currentAngle = Math.atan2(currentPoint.y - centerY, currentPoint.x - centerX);

@@ -243,17 +243,17 @@ export const api = {
   },
 
   groups: {
-    getAll: () =>
-      fetchApi<{ id: number; name: string; color: string; order: number }[]>('/api/groups'),
+    getByProject: (projectId: number) =>
+      fetchApi<{ id: number; name: string; color: string; order: number; projectId: number | null }[]>(`/api/groups?projectId=${projectId}`),
     
     getById: (id: number) =>
-      fetchApi<{ id: number; name: string; color: string; order: number }>(`/api/groups/${id}`),
+      fetchApi<{ id: number; name: string; color: string; order: number; projectId: number | null }>(`/api/groups/${id}`),
 
-    create: (data: { name: string; color: string; order?: number }) =>
-      fetchApiWithBody<{ id: number; name: string; color: string; order: number }>('/api/groups', 'POST', data),
+    create: (data: { name: string; color: string; order?: number; projectId: number }) =>
+      fetchApiWithBody<{ id: number; name: string; color: string; order: number; projectId: number }>('/api/groups', 'POST', data),
 
-    update: (id: number, data: Partial<{ name: string; color: string; order: number }>) =>
-      fetchApiWithBody<{ id: number; name: string; color: string; order: number }>(`/api/groups/${id}`, 'PUT', data, true),
+    update: (id: number, data: Partial<{ name: string; color: string; order: number; projectId: number }>) =>
+      fetchApiWithBody<{ id: number; name: string; color: string; order: number; projectId: number }>(`/api/groups/${id}`, 'PUT', data, true),
 
     delete: (id: number) =>
       fetchApi<void>(`/api/groups/${id}`, { method: 'DELETE', suppressLog: true }),
