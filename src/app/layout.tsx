@@ -18,12 +18,12 @@ const ka1 = localFont({
 
 export const metadata: Metadata = {
   title: "Nexus - Social Study Mapping Tool",
-  description: "Visualize and explore your interconnected thoughts with an interactive knowledge graph. A second brain for non-linear note-taking.",
-  keywords: ["knowledge graph", "note-taking", "second brain", "zettelkasten", "mind map"],
+  description: "A collaborative Social Study Mapping platform built with Next.js 16 and D3-force to visualize complex relationships.",
+  keywords: ["knowledge graph", "note-taking", "second brain", "Social Study Mapping", "mind map",  "Study Mapping", "Data Visualization"],
   authors: [{ name: "Ali Tamer" }],
   openGraph: {
     title: "Nexus - Social Study Mapping Tool",
-    description: "Visualize and explore your interconnected thoughts with an interactive knowledge graph.",
+    description: "A collaborative Social Study Mapping platform built with Next.js 16 and D3-force to visualize complex relationships.",
     type: "website",
   },
 };

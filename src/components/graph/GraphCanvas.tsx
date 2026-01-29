@@ -238,6 +238,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
   const resizeDragStartRef = useRef<{ x: number; y: number } | null>(null);
   const resizingShapeIdRef = useRef<number | null>(null);
   const originalShapeRef = useRef<DrawnShape | null>(null);
+  const currentResizingShapeRef = useRef<DrawnShape | null>(null);
   const [hoveredResizeHandle, setHoveredResizeHandle] = useState<ResizeHandle | null>(null);
   const [resizeUpdateCounter, setResizeUpdateCounter] = useState(0);
   const [editingShapeId, setEditingShapeId] = useState<number | null>(null);
@@ -247,6 +248,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
 
   const [showSelectionPane, setShowSelectionPane] = useState(false);
   const [isNodeDragging, setIsNodeDragging] = useState(false);
+  const [groupsReady, setGroupsReady] = useState(false);
 
   const filteredNodes = useMemo(
     () => {
@@ -585,6 +587,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     lastLoadedProjectIdRef.current = currentProject.id;
 
     setGroups([]);
+    setGroupsReady(false);
 
     const colorNames = ['violet', 'blue', 'green', 'yellow', 'red', 'pink', 'cyan', 'lime', 'orange', 'purple', 'teal', 'amber', 'emerald', 'sky', 'indigo', 'rose', 'fuchsia'];
 
@@ -609,8 +612,11 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
         if (groupsWithOrder.length > 0) {
           setActiveGroupId(groupsWithOrder[0].id);
         }
+        setGroupsReady(true);
       })
-      .catch(() => { });
+      .catch(() => {
+        setGroupsReady(true);
+      });
   }, [setGroups, setActiveGroupId, currentProject?.id]);
 
   // Update selected shapes when settings change
@@ -906,30 +912,45 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     return editingShapeId ? shapes.find(s => s.id === editingShapeId) : null;
   }, [shapes, editingShapeId]);
 
-  // On group load, delete any nodes/drawings with a groupId not in the current group list
   useEffect(() => {
     if (!groups || groups.length === 0) return;
     const validGroupIds = new Set(groups.map(g => g.id));
-    // Remove nodes with invalid groupId
+    const firstGroupId = groups[0]?.id;
+
     const validNodes = nodes.filter(n => n.groupId === undefined || validGroupIds.has(n.groupId));
     if (validNodes.length !== nodes.length) {
       const toDelete = nodes.filter(n => n.groupId !== undefined && !validGroupIds.has(n.groupId));
       toDelete.forEach(n => {
-        api.nodes.delete(n.id).catch(
-          // err => console.error('Failed to delete node with invalid group:', err)
-        );
+        api.nodes.delete(n.id).catch(() => { });
       });
       useGraphStore.getState().setNodes(validNodes);
     }
-    // Remove shapes with invalid groupId
-    const validShapes = shapes.filter(s => s.groupId === undefined || s.groupId === null || validGroupIds.has(s.groupId));
-    if (validShapes.length !== shapes.length) {
-      const toDelete = shapes.filter(s => s.groupId !== undefined && s.groupId !== null && !validGroupIds.has(s.groupId));
-      toDelete.forEach(s => {
-        api.drawings.delete(s.id).catch(
-          // err => console.error('Failed to delete drawing with invalid group:', err)
-        );
+
+    const orphanedShapes = shapes.filter(s => s.groupId === undefined || s.groupId === null);
+    const invalidShapes = shapes.filter(s => s.groupId !== undefined && s.groupId !== null && !validGroupIds.has(s.groupId));
+
+    if (invalidShapes.length > 0) {
+      invalidShapes.forEach(s => {
+        api.drawings.delete(s.id).catch(() => { });
       });
+    }
+
+    if (orphanedShapes.length > 0 && firstGroupId !== undefined) {
+      orphanedShapes.forEach(s => {
+        api.drawings.update(s.id, { groupId: firstGroupId }).catch(() => { });
+      });
+      const updatedShapes = shapes.map(s => {
+        if (s.groupId === undefined || s.groupId === null) {
+          return { ...s, groupId: firstGroupId };
+        }
+        if (!validGroupIds.has(s.groupId)) {
+          return null;
+        }
+        return s;
+      }).filter((s): s is DrawnShape => s !== null);
+      useGraphStore.getState().setShapes(updatedShapes);
+    } else if (invalidShapes.length > 0) {
+      const validShapes = shapes.filter(s => s.groupId !== undefined && s.groupId !== null && validGroupIds.has(s.groupId));
       useGraphStore.getState().setShapes(validShapes);
     }
   }, [groups, nodes, shapes]);
@@ -1257,7 +1278,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       } else {
         transformedShape = resizeShape(originalShapeRef.current, activeResizeHandleRef.current, worldPoint, resizeDragStartRef.current, resizeStartBoundsRef.current, e.shiftKey);
       }
-      shapesRef.current = shapesRef.current.map(s => s.id === transformedShape.id ? transformedShape : s);
+      currentResizingShapeRef.current = transformedShape;
       setResizeUpdateCounter(c => c + 1);
       return;
     }
@@ -1512,20 +1533,21 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
 
     // 2. Resize End
     if (isResizing && resizingShapeIdRef.current) {
-      const finalShapes = shapesRef.current;
-      setShapes(finalShapes);
-      const resizedShape = finalShapes.find(s => s.id === resizingShapeIdRef.current);
-      if (resizedShape && resizedShape.synced !== false) {
-        api.drawings.update(resizedShape.id, { points: resizedShape.points })
-          .catch(
-          // err => console.error('Failed to update drawing:', err)
-        );
+      const resizedShape = currentResizingShapeRef.current;
+      if (resizedShape) {
+        const updatedShapes = shapes.map(s => s.id === resizedShape.id ? resizedShape : s);
+        setShapes(updatedShapes);
+        if (resizedShape.synced !== false) {
+          api.drawings.update(resizedShape.id, { points: resizedShape.points })
+            .catch(() => { });
+        }
       }
       setIsResizing(false);
       activeResizeHandleRef.current = null;
       resizeStartBoundsRef.current = null;
       resizeDragStartRef.current = null;
       resizingShapeIdRef.current = null;
+      currentResizingShapeRef.current = null;
     }
 
     // 3. Shape Drag End (Selection)
@@ -1964,14 +1986,16 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
   }, [isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, drawPreview, currentProject?.id, shapeToApiDrawing, addShape]);
 
   const onRenderFramePost = useCallback((ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const renderShapes = shapesRef.current;
+    if (!groupsReady) return;
 
-    // Use value from ref to ensure we don't draw the shape being edited (avoids duplication)
     const currentEditingId = editingShapeIdRef.current;
+    const resizingId = resizingShapeIdRef.current;
+    const resizingShape = currentResizingShapeRef.current;
 
-    renderShapes.forEach(shape => {
-      // Skip the shape currently being edited (it's shown in the textarea)
+    filteredShapes.forEach(shape => {
       if (shape.id === currentEditingId) return;
+      if (isResizing && shape.id === resizingId) return;
+
       drawShapeOnContext(ctx, shape, globalScale);
       if (selectedShapeIds.has(shape.id)) {
         drawSelectionBox(ctx, shape, globalScale);
@@ -1984,6 +2008,15 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
         }
       }
     });
+
+    if (isResizing && resizingShape) {
+      drawShapeOnContext(ctx, resizingShape, globalScale);
+      drawSelectionBox(ctx, resizingShape, globalScale);
+      const bounds = getShapeBounds(resizingShape, globalScale);
+      if (bounds) {
+        drawResizeHandles(ctx, bounds, globalScale);
+      }
+    }
 
     if (isDrawing && currentPoints.length > 0) {
       const previewShape: DrawnShape = {
@@ -2001,7 +2034,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     if (isMarqueeSelecting && marqueeStart && marqueeEnd) {
       drawMarquee(ctx, marqueeStart, marqueeEnd, globalScale);
     }
-  }, [filteredShapes, isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, selectedShapeIds, isMarqueeSelecting, marqueeStart, marqueeEnd, isResizing, resizeUpdateCounter, drawPreview, currentProject?.id, shapeToApiDrawing, addShape, editingShapeId]);
+  }, [filteredShapes, isDrawing, currentPoints, graphSettings.activeTool, graphSettings.strokeColor, graphSettings.strokeWidth, graphSettings.strokeStyle, selectedShapeIds, isMarqueeSelecting, marqueeStart, marqueeEnd, isResizing, resizeUpdateCounter, drawPreview, currentProject?.id, shapeToApiDrawing, addShape, editingShapeId, groupsReady]);
 
   const handleSelectMouseDown = useCallback((e: React.MouseEvent) => {
     if (useGraphStore.getState().isConnectionPickerActive) return;
@@ -2039,6 +2072,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
             resizeDragStartRef.current = worldPoint;
             resizingShapeIdRef.current = selectedShape.id;
             originalShapeRef.current = { ...selectedShape, points: [...selectedShape.points] };
+            currentResizingShapeRef.current = { ...selectedShape, points: [...selectedShape.points] };
             pushToUndoStack(shapes);
             return;
           }
