@@ -2777,9 +2777,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
       {showSelectionPane && (
         <div className="graph-ui-hide" onMouseDown={(e) => e.stopPropagation()}>
           <SelectionPane
+            key={activeGroupId !== null ? `group-${activeGroupId}` : 'all'}
             isPreviewMode={graphSettings.isPreviewMode}
-            nodes={nodes}
-            shapes={shapes}
+            nodes={activeGroupId !== null ? nodes.filter(n => n.groupId === activeGroupId) : nodes}
+            shapes={activeGroupId !== null ? shapes.filter(s => s.groupId === activeGroupId) : shapes}
             selectedNodeIds={selectedNodeIds}
             selectedShapeIds={selectedShapeIds}
             onClose={() => setShowSelectionPane(false)}

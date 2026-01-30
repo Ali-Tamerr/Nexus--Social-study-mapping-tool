@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X, Layers, Circle, Square, Diamond, Minus, ArrowRight, Type, PenTool, ChevronDown, ChevronRight, MapPin, Trash2 } from 'lucide-react';
 import { DrawnShape, Node as NodeType } from '@/types/knowledge';
 
@@ -75,9 +75,35 @@ export function SelectionPane({
 }: SelectionPaneProps) {
     const [nodesExpanded, setNodesExpanded] = useState(true);
     const [shapesExpanded, setShapesExpanded] = useState(true);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const div = containerRef.current;
+        if (!div) return;
+
+        const stopPropagation = (e: Event) => e.stopPropagation();
+
+        // Use native listeners to stop propagation before it reaches React's event system or parent native listeners (like d3-zoom)
+        div.addEventListener('wheel', stopPropagation, { passive: false });
+        div.addEventListener('touchmove', stopPropagation, { passive: false });
+        div.addEventListener('touchstart', stopPropagation, { passive: false });
+        div.addEventListener('touchend', stopPropagation, { passive: false });
+        div.addEventListener('mousedown', stopPropagation);
+        div.addEventListener('pointerdown', stopPropagation);
+
+        return () => {
+            div.removeEventListener('wheel', stopPropagation);
+            div.removeEventListener('touchmove', stopPropagation);
+            div.removeEventListener('touchstart', stopPropagation);
+            div.removeEventListener('touchend', stopPropagation);
+            div.removeEventListener('mousedown', stopPropagation);
+            div.removeEventListener('pointerdown', stopPropagation);
+        };
+    }, []);
 
     return (
         <div
+            ref={containerRef}
             className="absolute right-4 bottom-16 z-40 w-56 max-h-80 rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur-sm shadow-lg overflow-hidden flex flex-col"
             onWheel={(e) => e.stopPropagation()}
         >

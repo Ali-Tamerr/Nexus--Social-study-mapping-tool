@@ -450,6 +450,7 @@ export default function PreviewPage({ params }: { params: Promise<{ id: string }
             {showSelectionPane && (
                 <div>
                     <SelectionPane
+                        key={`${activeGroupId}-${filteredNodes.length}-${filteredShapes.length}`}
                         isPreviewMode={true}
                         nodes={filteredNodes}
                         shapes={filteredShapes}
