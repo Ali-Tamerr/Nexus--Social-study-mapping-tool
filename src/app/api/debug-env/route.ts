@@ -40,14 +40,22 @@ export async function GET() {
     results.oauthError = err.cause ? String(err.cause) : undefined;
   }
 
-  // Test 3: GET /api/profiles/email/... (the profile lookup)
+  // Test 4: POST /api/auth/login (credentials login)
   try {
-    const res = await fetch(`${apiUrl}/api/profiles/email/${encodeURIComponent("debug-test@example.com")}`, {
+    const res = await fetch(`${apiUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        Email: "nonexistent-test-account@example.com",
+        Password: "WrongPassword123!",
+      }),
       signal: AbortSignal.timeout(5000),
     });
-    results.profileLookup = `${res.status} ${res.statusText}`;
+    const text = await res.text();
+    results.loginEndpoint = `${res.status} ${res.statusText}`;
+    results.loginBody = text.substring(0, 300);
   } catch (err: any) {
-    results.profileLookup = `FAILED: ${err.message}`;
+    results.loginEndpoint = `FAILED: ${err.message}`;
   }
 
   return NextResponse.json(results);

@@ -20,7 +20,7 @@ function getApiUrl() {
     throw new Error("API URL is not defined in environment variables");
   }
 
-  return url;
+  return url.replace(/\/$/, "");
 }
 
 function sanitizeUrl(url?: string | null): string | null {
