@@ -28,7 +28,7 @@ export async function GET() {
         ProviderUserId: "test-debug-12345",
         Email: "debug-test-nonexistent@example.com",
         DisplayName: "Debug Test",
-        AvatarUrl: "",
+        AvatarUrl: null,
       }),
       signal: AbortSignal.timeout(5000),
     });

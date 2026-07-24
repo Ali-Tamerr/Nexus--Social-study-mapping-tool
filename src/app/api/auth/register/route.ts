@@ -42,7 +42,10 @@ export async function POST(req: Request) {
         Email: email,
         Password: password,
         DisplayName: displayName,
-        AvatarUrl: avatarUrl ?? null,
+        AvatarUrl:
+          typeof avatarUrl === "string" && avatarUrl.trim()
+            ? avatarUrl.trim()
+            : null,
         Provider: provider,
       }),
     });

@@ -23,6 +23,16 @@ function getApiUrl() {
   return url;
 }
 
+function sanitizeUrl(url?: string | null): string | null {
+  if (!url || typeof url !== "string" || !url.trim()) return null;
+  try {
+    new URL(url);
+    return url.trim();
+  } catch {
+    return null;
+  }
+}
+
 async function backendRegister(user: any) {
   const apiUrl = getApiUrl();
   const provider = user.provider || "email";
@@ -40,7 +50,7 @@ async function backendRegister(user: any) {
       body: JSON.stringify({
         Email: user.email,
         DisplayName: user.name,
-        AvatarUrl: user.image,
+        AvatarUrl: sanitizeUrl(user.image),
         Password: password,
         Provider: provider,
       }),
@@ -87,7 +97,7 @@ async function backendOAuthMap(data: {
         ProviderUserId: data.providerUserId,
         Email: data.email,
         DisplayName: data.displayName,
-        AvatarUrl: data.avatarUrl,
+        AvatarUrl: sanitizeUrl(data.avatarUrl),
       }),
     });
 
