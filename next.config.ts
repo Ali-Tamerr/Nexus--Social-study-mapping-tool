@@ -10,12 +10,16 @@ const nextConfig: NextConfig = {
 
     if (!backendUrl) return [];
 
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`,
-      },
-    ];
+    return {
+      beforeFiles: [],
+      afterFiles: [
+        {
+          source: "/api/:path*",
+          destination: `${backendUrl}/api/:path*`,
+        },
+      ],
+      fallback: [],
+    };
   },
   images: {
     remotePatterns: [
