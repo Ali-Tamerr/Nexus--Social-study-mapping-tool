@@ -1,14 +1,15 @@
 import type { NextConfig } from "next";
 
-const backendUrl = (
-  process.env.NEXT_PRIVATE_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  ""
-).replace(/\/$/, "");
-
 const nextConfig: NextConfig = {
   async rewrites() {
+    const backendUrl = (
+      process.env.NEXT_PRIVATE_API_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      ""
+    ).replace(/\/$/, "");
+
     if (!backendUrl) return [];
+
     return [
       {
         source: "/api/:path*",
