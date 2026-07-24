@@ -1,38 +1,54 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const privateUrl = process.env.NEXT_PRIVATE_API_URL?.trim() || "(not set)";
-  const publicUrl = process.env.NEXT_PUBLIC_API_URL?.trim() || "(not set)";
-
   const apiUrl =
     process.env.NEXT_PRIVATE_API_URL?.trim() ||
     process.env.NEXT_PUBLIC_API_URL?.trim() ||
     "";
 
-  let backendReachable = "not tested";
-  let backendError = "";
+  const results: Record<string, unknown> = {
+    apiUrl: apiUrl ? apiUrl.replace(/^(https?:\/\/[^/]+).*/, "$1/***") : "(empty)",
+  };
 
-  if (apiUrl) {
-    try {
-      const res = await fetch(`${apiUrl}/health`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      backendReachable = `${res.status} ${res.statusText}`;
-    } catch (err: any) {
-      backendReachable = "FAILED";
-      backendError = err.message || String(err);
-    }
+  // Test 1: GET /health
+  try {
+    const res = await fetch(`${apiUrl}/health`, { signal: AbortSignal.timeout(5000) });
+    results.healthCheck = `${res.status} ${res.statusText}`;
+  } catch (err: any) {
+    results.healthCheck = `FAILED: ${err.message}`;
   }
 
-  return NextResponse.json({
-    NEXT_PRIVATE_API_URL: privateUrl.replace(/^(https?:\/\/[^/]+).*/, "$1/***"),
-    NEXT_PUBLIC_API_URL: publicUrl.replace(/^(https?:\/\/[^/]+).*/, "$1/***"),
-    resolvedApiUrl: apiUrl ? apiUrl.replace(/^(https?:\/\/[^/]+).*/, "$1/***") : "(empty)",
-    backendReachable,
-    backendError,
-    AUTH_SECRET_SET: !!process.env.AUTH_SECRET,
-    AUTH_GOOGLE_ID_SET: !!process.env.AUTH_GOOGLE_ID,
-    AUTH_GOOGLE_SECRET_SET: !!process.env.AUTH_GOOGLE_SECRET,
-    nodeEnv: process.env.NODE_ENV,
-  });
+  // Test 2: POST /api/auth/oauth (the exact call that signIn does)
+  try {
+    const res = await fetch(`${apiUrl}/api/auth/oauth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        Provider: "google",
+        ProviderUserId: "test-debug-12345",
+        Email: "debug-test-nonexistent@example.com",
+        DisplayName: "Debug Test",
+        AvatarUrl: "",
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const text = await res.text();
+    results.oauthEndpoint = `${res.status} ${res.statusText}`;
+    results.oauthBody = text.substring(0, 300);
+  } catch (err: any) {
+    results.oauthEndpoint = `FAILED: ${err.message}`;
+    results.oauthError = err.cause ? String(err.cause) : undefined;
+  }
+
+  // Test 3: GET /api/profiles/email/... (the profile lookup)
+  try {
+    const res = await fetch(`${apiUrl}/api/profiles/email/${encodeURIComponent("debug-test@example.com")}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    results.profileLookup = `${res.status} ${res.statusText}`;
+  } catch (err: any) {
+    results.profileLookup = `FAILED: ${err.message}`;
+  }
+
+  return NextResponse.json(results);
 }
