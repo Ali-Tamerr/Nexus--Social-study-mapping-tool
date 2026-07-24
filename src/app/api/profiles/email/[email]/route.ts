@@ -7,8 +7,19 @@ export async function GET(
   context: { params: Promise<{ email: string }> }
 ) {
   try {
+    const apiUrl =
+      process.env.NEXT_PRIVATE_API_URL?.trim() ||
+      process.env.NEXT_PUBLIC_API_URL?.trim() ||
+      (process.env.NODE_ENV === "development" ? "https://localhost:7007" : "");
+
+    if (!apiUrl) {
+      return NextResponse.json(
+        { message: "Server configuration error: API URL missing" },
+        { status: 500 },
+      );
+    }
+
     const { email } = await context.params;
-    const apiUrl = process.env.NEXT_PRIVATE_API_URL?.trim() || process.env.NEXT_PUBLIC_API_URL?.trim() || 'https://localhost:7007';
     const response = await fetch(`${apiUrl}/api/profiles/email/${encodeURIComponent(email)}`);
 
     if (response.status === 404) {

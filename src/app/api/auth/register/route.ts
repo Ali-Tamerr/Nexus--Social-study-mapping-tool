@@ -25,7 +25,14 @@ export async function POST(req: Request) {
     const apiUrl =
       process.env.NEXT_PRIVATE_API_URL?.trim() ||
       process.env.NEXT_PUBLIC_API_URL?.trim() ||
-      "https://localhost:7007";
+      (process.env.NODE_ENV === "development" ? "https://localhost:7007" : "");
+
+    if (!apiUrl) {
+      return NextResponse.json(
+        { message: "Server configuration error: API URL missing" },
+        { status: 500 },
+      );
+    }
 
 
     const response = await fetch(`${apiUrl}/api/auth/register`, {

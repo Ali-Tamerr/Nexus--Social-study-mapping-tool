@@ -9,11 +9,18 @@ if (process.env.NODE_ENV === "development") {
 }
 
 function getApiUrl() {
-  return (
+  const url =
     process.env.NEXT_PRIVATE_API_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    "https://localhost:7007"
-  );
+    process.env.NEXT_PUBLIC_API_URL?.trim();
+
+  if (!url) {
+    if (process.env.NODE_ENV === "development") {
+      return "https://localhost:7007";
+    }
+    throw new Error("API URL is not defined in environment variables");
+  }
+
+  return url;
 }
 
 async function backendRegister(user: any) {

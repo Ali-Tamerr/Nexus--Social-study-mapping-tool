@@ -64,7 +64,7 @@ function VerifyContent() {
 
             let backendId = user.id
             try {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://localhost:7007'
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === "development" ? "https://localhost:7007" : "");
                 const oauthRes = await fetch(`${apiUrl}/api/auth/oauth`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
