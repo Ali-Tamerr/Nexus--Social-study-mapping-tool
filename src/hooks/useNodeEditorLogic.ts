@@ -161,46 +161,52 @@ export function useNodeEditorLogic() {
     setIsSaving(true);
     setError(null);
 
+    const isGuest = user?.id?.startsWith('guest-');
+
     try {
       if (title !== activeNode.title || content !== (activeNode.content || '') || customColor !== originalColorRef.current || visualSize !== originalVisualSizeRef.current) {
-        await api.nodes.update(activeNode.id, {
-          id: activeNode.id,
-          title,
-          content: content || '',
-          groupId: activeNode.groupId,
-          customColor: customColor || undefined,
-          visualSize: visualSize,
-          projectId: activeNode.projectId,
-          userId: activeNode.userId,
-          group: activeNode.group ? { id: activeNode.group.id, name: activeNode.group.name, color: activeNode.group.color, order: activeNode.group.order } : { id: activeNode.groupId ?? 0, name: 'Default', color: '#808080', order: 0 },
-          x: activeNode.x,
-          y: activeNode.y,
-        });
+        if (!isGuest) {
+          await api.nodes.update(activeNode.id, {
+            id: activeNode.id,
+            title,
+            content: content || '',
+            groupId: activeNode.groupId,
+            customColor: customColor || undefined,
+            visualSize: visualSize,
+            projectId: activeNode.projectId,
+            userId: activeNode.userId,
+            group: activeNode.group ? { id: activeNode.group.id, name: activeNode.group.name, color: activeNode.group.color, order: activeNode.group.order } : { id: activeNode.groupId ?? 0, name: 'Default', color: '#808080', order: 0 },
+            x: activeNode.x,
+            y: activeNode.y,
+          });
+        }
         updateNode(activeNode.id, { title, content, customColor, visualSize });
       }
 
-      for (const [id] of deletedAttachments) await api.attachments.delete(id);
-      for (const att of pendingAttachments) {
-        const newAtt = await api.attachments.create({ nodeId: activeNode.id, fileName: att.fileName, fileUrl: att.fileUrl });
-        removeAttachmentFromNode(activeNode.id, att.id);
-        addAttachmentToNode(activeNode.id, newAtt);
-      }
+      if (!isGuest) {
+        for (const [id] of deletedAttachments) await api.attachments.delete(id);
+        for (const att of pendingAttachments) {
+          const newAtt = await api.attachments.create({ nodeId: activeNode.id, fileName: att.fileName, fileUrl: att.fileUrl });
+          removeAttachmentFromNode(activeNode.id, att.id);
+          addAttachmentToNode(activeNode.id, newAtt);
+        }
 
-      for (const [id] of deletedLinks) await api.links.delete(id);
-      for (const link of pendingLinks) {
-        const newLink = await api.links.create({
-          sourceId: link.sourceId, targetId: link.targetId, color: link.color,
-          description: link.description || undefined, userId: link.userId || activeNode.userId || user?.id || ''
-        });
-        deleteLink(link.id);
-        addLink(newLink);
-      }
-      for (const [id, link] of editedLinks) {
-        const updated = await api.links.update(id, {
-          id: id, sourceId: link.sourceId, targetId: link.targetId, color: link.color,
-          description: link.description || undefined, userId: link.userId || activeNode.userId || user?.id || ''
-        });
-        updateLink(id, updated);
+        for (const [id] of deletedLinks) await api.links.delete(id);
+        for (const link of pendingLinks) {
+          const newLink = await api.links.create({
+            sourceId: link.sourceId, targetId: link.targetId, color: link.color,
+            description: link.description || undefined, userId: link.userId || activeNode.userId || user?.id || ''
+          });
+          deleteLink(link.id);
+          addLink(newLink);
+        }
+        for (const [id, link] of editedLinks) {
+          const updated = await api.links.update(id, {
+            id: id, sourceId: link.sourceId, targetId: link.targetId, color: link.color,
+            description: link.description || undefined, userId: link.userId || activeNode.userId || user?.id || ''
+          });
+          updateLink(id, updated);
+        }
       }
 
       setPendingAttachments([]); setDeletedAttachments(new Map());
@@ -213,7 +219,7 @@ export function useNodeEditorLogic() {
       showToast('Node saved successfully');
       toggleEditor(false);
 
-      if (activeNode.projectId && user?.id) realtimeSync.notifyUpdate(activeNode.projectId, user.id);
+      if (activeNode.projectId && user?.id && !isGuest) realtimeSync.notifyUpdate(activeNode.projectId, user.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
       showToast('Failed to save node', 'error');
@@ -227,12 +233,15 @@ export function useNodeEditorLogic() {
     if (!await showConfirmation('Are you sure you want to delete this node?')) return;
 
     setIsDeleting(true);
+    const isGuest = user?.id?.startsWith('guest-');
     try {
-      await api.nodes.delete(activeNode.id);
+      if (!isGuest) {
+        await api.nodes.delete(activeNode.id);
+      }
       deleteNode(activeNode.id);
       toggleEditor(false);
       showToast('Node deleted successfully');
-      if (activeNode.projectId && user?.id) realtimeSync.notifyUpdate(activeNode.projectId, user.id);
+      if (activeNode.projectId && user?.id && !isGuest) realtimeSync.notifyUpdate(activeNode.projectId, user.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');
       showToast('Failed to delete node', 'error');
@@ -351,6 +360,13 @@ export function useNodeEditorLogic() {
 
   const handleAddTag = async () => {
     if (!newTagName.trim() || !activeNode) return;
+    const isGuest = user?.id?.startsWith('guest-');
+    if (isGuest) {
+      const tag: TagType = { id: -Date.now(), name: newTagName.trim(), color: newTagColor, createdAt: new Date().toISOString() };
+      addTagToNode(activeNode.id, tag);
+      setNewTagName(''); setShowTagMenu(false);
+      return;
+    }
     try {
       let tag: TagType;
       try { tag = await api.tags.getByName(newTagName.trim()); } catch {
@@ -366,10 +382,13 @@ export function useNodeEditorLogic() {
 
   const handleRemoveTag = async (tagId: number) => {
     if (!activeNode) return;
-    try {
-      await api.nodes.removeTag(activeNode.id, tagId);
-      removeTagFromNode(activeNode.id, tagId);
-    } catch {}
+    const isGuest = user?.id?.startsWith('guest-');
+    if (!isGuest) {
+      try {
+        await api.nodes.removeTag(activeNode.id, tagId);
+      } catch {}
+    }
+    removeTagFromNode(activeNode.id, tagId);
   };
 
   const handleAddConnection = () => {

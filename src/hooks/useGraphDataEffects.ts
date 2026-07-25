@@ -102,6 +102,21 @@ export function useGraphDataEffects({
     setGroups([]);
     setGroupsReady(false);
 
+    if (user?.id?.startsWith('guest-')) {
+      const localGroups = localStorage.getItem(`nexus_local_groups_${currentProject.id}`);
+      if (localGroups) {
+        try {
+          const parsed = JSON.parse(localGroups);
+          setGroups(parsed);
+          if (parsed.length > 0) setActiveGroupId(parsed[0].id);
+        } catch (e) { setGroups([]); }
+      } else {
+        setGroups([]);
+      }
+      setGroupsReady(true);
+      return;
+    }
+
     const colorNames = ['violet', 'blue', 'green', 'yellow', 'red', 'pink', 'cyan', 'lime', 'orange', 'purple', 'teal', 'amber', 'emerald', 'sky', 'indigo', 'rose', 'fuchsia'];
 
     api.groups.getByProject(currentProject.id)
@@ -129,7 +144,7 @@ export function useGraphDataEffects({
       .catch(() => {
         setGroupsReady(true);
       });
-  }, [setGroups, setActiveGroupId, currentProject?.id]);
+  }, [setGroups, setActiveGroupId, currentProject?.id, user?.id]);
 
   // ─── Shape Settings Sync (single helper for all 6 properties) ───
   const syncSelectedShapeProp = useCallback((prop: string, value: any) => {
@@ -137,11 +152,11 @@ export function useGraphDataEffects({
       selectedShapeIds.forEach(id => {
         updateShape(id, { [prop]: value });
         const s = shapes.find(sh => sh.id === id);
-        if (s && s.synced !== false) {
+        if (s && s.synced !== false && !user?.id?.startsWith('guest-')) {
           api.drawings.update(id, shapeToApiDrawing({ ...s, [prop]: value }, currentProject?.id || 0, activeGroupId ?? undefined));
         }
       });
-      if (currentProject?.id && user?.id) {
+      if (currentProject?.id && user?.id && !user.id.startsWith('guest-')) {
         realtimeSync.notifyUpdate(currentProject.id, user.id);
       }
     }
@@ -299,13 +314,33 @@ export function useGraphDataEffects({
   useEffect(() => {
     if (!currentProject?.id) return;
 
+    if (user?.id?.startsWith('guest-')) {
+      const localDrawings = localStorage.getItem(`nexus_local_drawings_${currentProject.id}`);
+      if (localDrawings) {
+        try {
+          const parsed = JSON.parse(localDrawings);
+          setShapes(parsed);
+        } catch (e) { setShapes([]); }
+      } else {
+        setShapes([]);
+      }
+      return;
+    }
+
     api.drawings.getByProject(currentProject.id)
       .then(drawings => {
         const loadedShapes = drawings.map(apiDrawingToShape);
         setShapes(loadedShapes);
       })
       .catch(() => { });
-  }, [currentProject?.id, apiDrawingToShape, setShapes]);
+  }, [currentProject?.id, apiDrawingToShape, setShapes, user?.id]);
+
+  // ─── Local Workspace Auto-Save Drawings ─────────────────────
+  useEffect(() => {
+    if (user?.id?.startsWith('guest-') && currentProject?.id) {
+      localStorage.setItem(`nexus_local_drawings_${currentProject.id}`, JSON.stringify(shapes));
+    }
+  }, [shapes, currentProject?.id, user?.id]);
 
   // ─── Preview Mode Reheat ────────────────────────────────────
   useEffect(() => {

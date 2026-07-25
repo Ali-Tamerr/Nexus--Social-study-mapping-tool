@@ -260,7 +260,7 @@ export function useGraphDrawingHandlers({
 
     addShape(newShape);
 
-    if (currentProject?.id) {
+    if (currentProject?.id && !user?.id?.startsWith('guest-')) {
       const saveDrawing = async () => {
         let groupId = activeGroupId;
         if (!groupId || groupId === 0) {

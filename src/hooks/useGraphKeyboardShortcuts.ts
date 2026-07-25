@@ -73,23 +73,28 @@ export function useGraphKeyboardShortcuts({
     }
 
     // Sync Shapes
+    const isGuest = user?.id?.startsWith('guest-');
     const oldShapeIds = new Set(oldShapes.map(s => s.id));
     const newShapeIds = new Set(targetShapes.map(s => s.id));
 
     const reappearedShapes = targetShapes.filter(s => !oldShapeIds.has(s.id));
     const disappearedShapes = oldShapes.filter(s => !newShapeIds.has(s.id));
 
-    for (const shape of disappearedShapes) {
-      try { await api.drawings.delete(shape.id); } catch { }
+    if (!isGuest) {
+      for (const shape of disappearedShapes) {
+        try { await api.drawings.delete(shape.id); } catch { }
+      }
     }
 
     const shapeIdMap = new Map<number, number>();
-    for (const shape of reappearedShapes) {
-      try {
-        const payload = shapeToApiDrawing(shape, currentProject?.id || 0, activeGroupId ?? undefined);
-        const newShape = await api.drawings.create(payload);
-        shapeIdMap.set(shape.id, newShape.id);
-      } catch { }
+    if (!isGuest) {
+      for (const shape of reappearedShapes) {
+        try {
+          const payload = shapeToApiDrawing(shape, currentProject?.id || 0, activeGroupId ?? undefined);
+          const newShape = await api.drawings.create(payload);
+          shapeIdMap.set(shape.id, newShape.id);
+        } catch { }
+      }
     }
 
     // Sync Nodes
@@ -99,26 +104,30 @@ export function useGraphKeyboardShortcuts({
     const reappearedNodes = targetNodes.filter((n: any) => !oldNodeIds.has(n.id));
     const disappearedNodes = oldNodes.filter((n: any) => !newNodeIds.has(n.id));
 
-    for (const node of disappearedNodes) {
-      try { await api.nodes.delete(node.id); } catch { }
+    if (!isGuest) {
+      for (const node of disappearedNodes) {
+        try { await api.nodes.delete(node.id); } catch { }
+      }
     }
 
     const nodeIdMap = new Map<number, number>();
-    for (const node of reappearedNodes) {
-      try {
-        const payload = {
-          title: node.title,
-          content: node.content || '',
-          projectId: node.projectId,
-          groupId: node.groupId,
-          userId: node.userId,
-          customColor: node.customColor,
-          x: node.x,
-          y: node.y
-        };
-        const newNode = await api.nodes.create(payload);
-        nodeIdMap.set(node.id, newNode.id);
-      } catch { }
+    if (!isGuest) {
+      for (const node of reappearedNodes) {
+        try {
+          const payload = {
+            title: node.title,
+            content: node.content || '',
+            projectId: node.projectId,
+            groupId: node.groupId,
+            userId: node.userId,
+            customColor: node.customColor,
+            x: node.x,
+            y: node.y
+          };
+          const newNode = await api.nodes.create(payload);
+          nodeIdMap.set(node.id, newNode.id);
+        } catch { }
+      }
     }
 
     // Apply ID mappings if items were re-created with new IDs
@@ -147,7 +156,7 @@ export function useGraphKeyboardShortcuts({
       }, 50);
     }
 
-    if (currentProject?.id && user?.id) {
+    if (currentProject?.id && user?.id && !isGuest) {
       realtimeSync.notifyUpdate(currentProject.id, user.id);
     }
   }, [undo, redo, setShapes, setNodes, currentProject?.id, activeGroupId, shapeToApiDrawing, user?.id]);
@@ -184,13 +193,16 @@ export function useGraphKeyboardShortcuts({
 
         if (hasSelectedShapes || hasSelectedNodes) {
           e.preventDefault();
+          const isGuest = user?.id?.startsWith('guest-');
           // Delete selected shapes
           if (hasSelectedShapes && shapesRef.current && selectedShapeIdsRef.current) {
             pushToUndoStack();
             const toDelete = shapesRef.current.filter(s => selectedShapeIdsRef.current!.has(s.id));
             const remaining = shapesRef.current.filter(s => !selectedShapeIdsRef.current!.has(s.id));
             setShapes(remaining);
-            toDelete.forEach(s => api.drawings.delete(s.id).catch(() => { }));
+            if (!isGuest) {
+              toDelete.forEach(s => api.drawings.delete(s.id).catch(() => { }));
+            }
             setSelectedShapeIds(new Set());
           }
           // Delete selected nodes
@@ -198,13 +210,15 @@ export function useGraphKeyboardShortcuts({
             const deleteNode = useGraphStore.getState().deleteNode;
             selectedNodeIdsRefForDelete.current.forEach(nodeId => {
               deleteNode(nodeId);
-              api.nodes.delete(nodeId).catch(() => { });
+              if (!isGuest) {
+                api.nodes.delete(nodeId).catch(() => { });
+              }
             });
             setSelectedNodeIds(new Set());
             setActiveNode(null);
           }
 
-          if (currentProject?.id && user?.id) {
+          if (currentProject?.id && user?.id && !isGuest) {
             realtimeSync.notifyUpdate(currentProject.id, user.id);
           }
         }
@@ -290,7 +304,62 @@ export function useGraphKeyboardShortcuts({
           const offset = 50;
 
           (async () => {
-            // Paste Nodes
+            const isGuest = user?.id?.startsWith('guest-');
+            if (isGuest) {
+              const nodeIds: number[] = [];
+              const shapeIds: number[] = [];
+              for (const n of cpNodes) {
+                const newNode = {
+                  id: -Date.now() - Math.floor(Math.random() * 1000),
+                  title: n.title,
+                  content: n.content || '',
+                  projectId: currentProject.id,
+                  groupId: activeGroupId !== null ? activeGroupId : (n.groupId || 0),
+                  userId: user?.id || 'guest-local-user',
+                  customColor: n.customColor,
+                  x: (n.x || 0) + offset,
+                  y: (n.y || 0) + offset,
+                };
+                useGraphStore.getState().addNode(newNode as any);
+                nodeIds.push(newNode.id);
+              }
+              for (const s of cpShapes) {
+                const newShape: DrawnShape = {
+                  id: -Date.now() - Math.floor(Math.random() * 1000),
+                  projectId: currentProject.id,
+                  type: s.type,
+                  points: (s.points || []).map((p: any) => ({ x: (p.x || 0) + offset, y: (p.y || 0) + offset })),
+                  color: s.color,
+                  width: s.width,
+                  style: s.style,
+                  text: s.text,
+                  fontSize: s.fontSize,
+                  fontFamily: s.fontFamily,
+                  textDir: s.textDir,
+                  groupId: activeGroupId !== null ? activeGroupId : s.groupId
+                };
+                useGraphStore.getState().addShape(newShape);
+                shapeIds.push(newShape.id);
+              }
+              setSelectedNodeIds(new Set(nodeIds));
+              setSelectedShapeIds(new Set(shapeIds));
+
+              const nextClipboard = {
+                nodes: cpNodes.map((n: any) => ({ ...n, x: (n.x || 0) + offset, y: (n.y || 0) + offset })),
+                shapes: cpShapes.map((s: any) => ({
+                  ...s,
+                  points: (s.points || []).map((p: any) => ({ x: (p.x || 0) + offset, y: (p.y || 0) + offset }))
+                })),
+              };
+              if (clipboardRef.current !== undefined) {
+                 (clipboardRef as any).current = nextClipboard;
+              }
+              localStorage.setItem('nexus-graph-clipboard', JSON.stringify(nextClipboard));
+              showToast(`Pasted ${nodeIds.length} nodes and ${shapeIds.length} drawings`, 'info');
+              return;
+            }
+
+            // Paste Nodes (Remote)
             const nodeIds: number[] = [];
             if (cpNodes.length > 0) {
               const payloads = cpNodes.map((n: any) => ({
@@ -308,7 +377,6 @@ export function useGraphKeyboardShortcuts({
               try {
                 createdNodes = await api.nodes.batchCreate(payloads);
               } catch (err) {
-                // Fallback to sequential
                 for (const p of payloads) {
                   try {
                     const node = await api.nodes.create(p);
@@ -362,7 +430,7 @@ export function useGraphKeyboardShortcuts({
               }
             }
 
-            // Paste Shapes
+            // Paste Shapes (Remote)
             const shapeIds: number[] = [];
             for (const s of cpShapes) {
               try {
@@ -412,6 +480,27 @@ export function useGraphKeyboardShortcuts({
           navigator.clipboard.readText().then(text => {
             if (!text || text.trim() === '') return;
             const center = graphRef.current?.centerAt() || { x: 0, y: 0 };
+            const isGuest = user?.id?.startsWith('guest-');
+            if (isGuest) {
+              const newShape: DrawnShape = {
+                id: -Date.now(),
+                projectId: currentProject.id,
+                type: 'text',
+                points: [{ x: center.x, y: center.y }],
+                color: graphSettings.strokeColor || '#355ea1',
+                width: graphSettings.strokeWidth || 2,
+                style: graphSettings.strokeStyle || 'solid',
+                text: text.trim(),
+                fontSize: graphSettings.fontSize || 16,
+                fontFamily: graphSettings.fontFamily || 'Inter',
+                textDir: graphSettings.textDir || 'ltr',
+                groupId: activeGroupId ?? undefined
+              };
+              addShape(newShape);
+              setSelectedShapeIds(new Set([newShape.id]));
+              setSelectedNodeIds(new Set());
+              return;
+            }
             const payload = {
               projectId: currentProject.id,
               type: 'text',
@@ -451,6 +540,7 @@ export function useGraphKeyboardShortcuts({
           e.preventDefault();
           const selectedNodes = selectedNodeIdsRef.current;
           const selectedShapes = selectedShapeIdsRef.current;
+          const isGuest = user?.id?.startsWith('guest-');
 
           // Move Nodes
           if (selectedNodes && selectedNodes.size > 0 && nodeCacheRef.current && nodeSaveTimeoutsRef.current) {
@@ -464,7 +554,7 @@ export function useGraphKeyboardShortcuts({
                 if (timeouts.has(id)) clearTimeout(timeouts.get(id));
                 timeouts.set(id, setTimeout(() => {
                   const fullNode = useGraphStore.getState().nodes.find(n => n.id === id);
-                  if (fullNode) api.nodes.update(id, { ...fullNode, x: cachedNode.fx, y: cachedNode.fy }).catch(() => { });
+                  if (fullNode && !isGuest) api.nodes.update(id, { ...fullNode, x: cachedNode.fx, y: cachedNode.fy }).catch(() => { });
                   timeouts.delete(id);
                 }, 300));
               }
@@ -484,7 +574,7 @@ export function useGraphKeyboardShortcuts({
                 if (timeouts.has(s.id)) clearTimeout(timeouts.get(s.id));
                 timeouts.set(s.id, setTimeout(() => {
                   const dto = shapeToApiDrawing({ ...s, points: newPoints }, currentProject?.id || 0, activeGroupId ?? undefined);
-                  api.drawings.update(s.id, dto).catch(() => { });
+                  if (!isGuest) api.drawings.update(s.id, dto).catch(() => { });
                   timeouts.delete(s.id);
                 }, 300));
                 return { ...s, points: newPoints };

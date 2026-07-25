@@ -422,7 +422,7 @@ export function useGraphMouseHandlers(props: UseGraphMouseHandlersProps) {
       if (resizedShape) {
         const updatedShapes = shapes.map(s => s.id === resizedShape.id ? resizedShape : s);
         setShapes(updatedShapes);
-        if (resizedShape.synced !== false) {
+        if (resizedShape.synced !== false && !user?.id?.startsWith('guest-')) {
           api.drawings.update(resizedShape.id, shapeToApiDrawing(resizedShape, currentProject?.id || 0, activeGroupId ?? undefined))
             .catch(() => { });
         }
@@ -440,7 +440,8 @@ export function useGraphMouseHandlers(props: UseGraphMouseHandlersProps) {
       setShapes(finalShapes);
 
       (async () => {
-        if (selectedShapeIds.size > 0) {
+        const isGuest = user?.id?.startsWith('guest-');
+        if (!isGuest && selectedShapeIds.size > 0) {
           const shapeUpdates = finalShapes
             .filter(s => selectedShapeIds.has(s.id) && s.synced !== false)
             .map(s => ({ ...shapeToApiDrawing(s, currentProject?.id || 0, activeGroupId ?? undefined), id: s.id }));
@@ -473,7 +474,7 @@ export function useGraphMouseHandlers(props: UseGraphMouseHandlersProps) {
             y: n.y
           }));
 
-          if (updatesToPush.length > 0) {
+          if (updatesToPush.length > 0 && !isGuest) {
             try {
               await api.nodes.batchUpdate(updatesToPush);
             } catch { }
@@ -620,7 +621,8 @@ export function useGraphMouseHandlers(props: UseGraphMouseHandlersProps) {
           y: n.y
         }));
 
-        if (updatesToPush.length > 0) {
+        const isGuest = user?.id?.startsWith('guest-');
+        if (updatesToPush.length > 0 && !isGuest) {
           try {
             await api.nodes.batchUpdate(updatesToPush);
             if (currentProject?.id && user?.id) {
@@ -630,7 +632,7 @@ export function useGraphMouseHandlers(props: UseGraphMouseHandlersProps) {
         }
 
         const currentSelectedShapeIds = selectedShapeIdsRef.current;
-        if (currentSelectedShapeIds.size > 0) {
+        if (currentSelectedShapeIds.size > 0 && !isGuest) {
           const finalShapes = shapesRef.current;
           setShapes(finalShapes);
 
@@ -655,7 +657,8 @@ export function useGraphMouseHandlers(props: UseGraphMouseHandlersProps) {
       updateNode(nodeId, { x: node.x, y: node.y });
 
       const fullNode = storeNodes.find(sn => sn.id === nodeId);
-      if (fullNode) {
+      const isGuest = user?.id?.startsWith('guest-');
+      if (fullNode && !isGuest) {
         api.nodes.update(nodeId, {
           id: fullNode.id,
           title: fullNode.title,

@@ -28,6 +28,8 @@ export function UserMenu() {
 
   if (!user) return null;
 
+  const isGuest = user.provider === 'guest' || user.id?.startsWith('guest-');
+
   const initials = user.displayName
     ? user.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : user.email?.charAt(0).toUpperCase() || 'U';
@@ -38,26 +40,34 @@ export function UserMenu() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-zinc-800"
       >
-        {user.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt={user.displayName || 'User'}
-            className="h-8 w-8 rounded-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#355ea1] text-sm text-white">
-            {initials}
+        {isGuest ? (
+          <div className="text-left">
+            <p className="text-sm font-medium text-white">Local Workspace</p>
           </div>
+        ) : (
+          <>
+            {user.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.displayName || 'User'}
+                className="h-8 w-8 rounded-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#355ea1] text-sm text-white">
+                {initials}
+              </div>
+            )}
+            <div className="hidden md:block text-left">
+              <p className="text-sm font-medium text-white">
+                {user.displayName || 'User'}
+              </p>
+              <p className="text-xs text-zinc-500 truncate max-lg:max-w-[90px]">
+                {user.email}
+              </p>
+            </div>
+          </>
         )}
-        <div className="hidden md:block text-left">
-          <p className="text-sm font-medium text-white">
-            {user.displayName || 'User'}
-          </p>
-          <p className="text-xs text-zinc-500 truncate max-lg:max-w-[90px]">
-            {user.email}
-          </p>
-        </div>
         <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
@@ -67,62 +77,48 @@ export function UserMenu() {
           style={{ backgroundColor: '#18181b', isolation: 'isolate' }}
         >
           <div className="border-b border-zinc-800 px-4 pb-3 pt-1">
-            <p className="font-medium text-white">{user.displayName || 'User'}</p>
-            <p className="text-sm text-zinc-500 truncate">{user.email}</p>
-
+            <p className="font-medium text-white">{isGuest ? 'Local Workspace' : (user.displayName || 'User')}</p>
+            {!isGuest && <p className="text-sm text-zinc-500 truncate">{user.email}</p>}
           </div>
 
-          <div className="py-1">
-            <button
-              onClick={() => {
-                if (user.provider === 'guest' || user.id?.startsWith('guest-')) {
-                  showToast("Profile settings are not available in Local Workspace mode", 'info');
+          {!isGuest && (
+            <div className="py-1">
+              <button
+                onClick={() => {
+                  if (user.provider === 'google') {
+                    showToast("You can't edit profile because you're signed in with Google account", 'error');
+                    setIsOpen(false);
+                    return;
+                  }
+                  setModalMode('edit_profile');
+                  setShowProfileModal(true);
                   setIsOpen(false);
-                  return;
-                }
-                if (user.provider === 'google') {
-                  showToast("You can't edit profile because you're signed in with Google account", 'error');
+                }}
+                className="flex w-full items-center gap-3 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
+              >
+                <UserPen className="h-4 w-4" />
+                Edit Profile
+              </button>
+              <button
+                onClick={() => {
+                  if (user.provider === 'google') {
+                    showToast("You can't change password because you're signed in with Google account", 'error');
+                    setIsOpen(false);
+                    return;
+                  }
+                  setModalMode('change_password');
+                  setShowProfileModal(true);
                   setIsOpen(false);
-                  return;
-                }
-                setModalMode('edit_profile');
-                setShowProfileModal(true);
-                setIsOpen(false);
-              }}
-              className="flex w-full items-center gap-3 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
-            >
-              <UserPen className="h-4 w-4" />
-              Edit Profile
-            </button>
-            <button
-              onClick={() => {
-                if (user.provider === 'guest' || user.id?.startsWith('guest-')) {
-                  showToast("Password settings are not available in Local Workspace mode", 'info');
-                  setIsOpen(false);
-                  return;
-                }
-                if (user.provider === 'google') {
-                  showToast("You can't change password because you're signed in with Google account", 'error');
-                  setIsOpen(false);
-                  return;
-                }
-                setModalMode('change_password');
-                setShowProfileModal(true);
-                setIsOpen(false);
-              }}
-              className="flex w-full items-center gap-3 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
-            >
-              <Lock className="h-4 w-4" />
-              Change Password
-            </button>
-           
-            {/* <button className="flex w-full items-center gap-3 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800">
-              <Settings className="h-4 w-4" />
-              Settings
-            </button> */}
-          </div>
+                }}
+                className="flex w-full items-center gap-3 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
+              >
+                <Lock className="h-4 w-4" />
+                Change Password
+              </button>
+            </div>
+          )}
 
-          <div className="border-t border-zinc-800 pt-1">
+          <div className={`${isGuest ? '' : 'border-t border-zinc-800'} pt-1`}>
             <button
               onClick={async () => {
                 await signOut({ redirect: false });
@@ -133,7 +129,7 @@ export function UserMenu() {
               className="flex w-full items-center gap-3 px-4 py-2 text-sm text-red-400 transition-colors hover:bg-zinc-800"
             >
               <LogOut className="h-4 w-4" />
-              Sign out
+              {isGuest ? 'Exit Local Workspace' : 'Sign out'}
             </button>
           </div>
           <a
