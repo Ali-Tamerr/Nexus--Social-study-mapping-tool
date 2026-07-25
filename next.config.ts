@@ -13,8 +13,10 @@ const nextConfig: NextConfig = {
     return {
       beforeFiles: [],
       afterFiles: [
+        // Proxy backend API calls, but EXCLUDE Next.js-hosted routes:
+        // /api/auth/*, /api/debug-*, /api/profiles/*
         {
-          source: "/api/:path*",
+          source: "/api/:path((?!auth|debug-|profiles).*)",
           destination: `${backendUrl}/api/:path*`,
         },
       ],
