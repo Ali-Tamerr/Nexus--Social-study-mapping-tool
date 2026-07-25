@@ -90,6 +90,7 @@ export default function HomePage() {
             <WelcomeHero
               onSignup={() => auth.open('signup')}
               onLogin={() => auth.open('login')}
+              onGuest={handlers.guest.enter}
             />
           </>
         ) : (

@@ -26,7 +26,7 @@ export function useProjects(userId: string | null) {
       setProjects(projects);
       return projects;
     },
-    enabled: !!userId,
+    enabled: !!userId && !userId.startsWith('guest-'),
   });
 }
 

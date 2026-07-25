@@ -51,7 +51,7 @@ export function useHomePageLogic() {
   const [groupToDelete, setGroupToDelete] = useState<typeof collections[0] | null>(null);
 
   useEffect(() => {
-    if (user?.id && isAuthenticated) {
+    if (user?.id && isAuthenticated && !user.id.startsWith('guest-')) {
       setCurrentUserId(user.id);
       fetchCollections(user.id);
     }
@@ -63,10 +63,25 @@ export function useHomePageLogic() {
 
       setGraphLoading(true);
       try {
+        if (user.id.startsWith('guest-')) {
+          const localStr = localStorage.getItem('nexus_local_projects');
+          if (localStr) {
+            try { setProjects(JSON.parse(localStr)); } catch (e) { setProjects([]); }
+          } else {
+            setProjects([]);
+          }
+          return;
+        }
+
         const fetchedProjects = await api.projects.getByUser(user.id);
         setProjects(fetchedProjects);
       } catch (err) {
-        setProjects([]);
+        const localStr = localStorage.getItem('nexus_local_projects');
+        if (localStr) {
+          try { setProjects(JSON.parse(localStr)); } catch (e) { setProjects([]); }
+        } else {
+          setProjects([]);
+        }
       } finally {
         setGraphLoading(false);
       }
@@ -95,6 +110,29 @@ export function useHomePageLogic() {
     if (!user?.id) return;
     setGraphLoading(true);
 
+    const isGuest = user.id.startsWith('guest-');
+
+    if (isGuest) {
+      const newProject: Project = {
+        id: Date.now(),
+        name: data.name,
+        description: data.description || '',
+        color: data.color,
+        userId: user.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      addProject(newProject);
+      const localStr = localStorage.getItem('nexus_local_projects');
+      const currentList: Project[] = localStr ? JSON.parse(localStr) : [];
+      const updatedList = [newProject, ...currentList];
+      localStorage.setItem('nexus_local_projects', JSON.stringify(updatedList));
+      toggleCreateProject(false);
+      showToast('Local project created', 'success');
+      setGraphLoading(false);
+      return;
+    }
+
     try {
       const newProject = await api.projects.create({
         name: data.name,
@@ -106,7 +144,22 @@ export function useHomePageLogic() {
       toggleCreateProject(false);
     } catch (err) {
       console.error('Failed to create project:', err);
-      showToast(getFriendlyErrorMessage(err), 'error');
+      const localProject: Project = {
+        id: Date.now(),
+        name: data.name,
+        description: data.description || '',
+        color: data.color,
+        userId: user.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      addProject(localProject);
+      const localStr = localStorage.getItem('nexus_local_projects');
+      const currentList: Project[] = localStr ? JSON.parse(localStr) : [];
+      const updatedList = [localProject, ...currentList];
+      localStorage.setItem('nexus_local_projects', JSON.stringify(updatedList));
+      toggleCreateProject(false);
+      showToast('Project created locally', 'info');
     } finally {
       setGraphLoading(false);
     }
@@ -126,15 +179,33 @@ export function useHomePageLogic() {
     if (!editingProject) return;
 
     setGraphLoading(true);
+    const isGuest = user?.id?.startsWith('guest-');
+    const updatedProject = { ...editingProject, ...data, updatedAt: new Date().toISOString() };
+
+    if (isGuest) {
+      setProjects(projects.map(p => p.id === editingProject.id ? updatedProject : p));
+      const localStr = localStorage.getItem('nexus_local_projects');
+      if (localStr) {
+        const currentList: Project[] = JSON.parse(localStr);
+        const updatedList = currentList.map(p => p.id === editingProject.id ? updatedProject : p);
+        localStorage.setItem('nexus_local_projects', JSON.stringify(updatedList));
+      }
+      setEditingProject(null);
+      showToast('Project updated');
+      setGraphLoading(false);
+      return;
+    }
+
     try {
-      const updatedProject = { ...editingProject, ...data };
       await api.projects.update(editingProject.id, updatedProject);
       setProjects(projects.map(p => p.id === editingProject.id ? updatedProject : p));
       setEditingProject(null);
       showToast('Project updated successfully');
     } catch (err) {
       console.error('Failed to update project:', err);
-      showToast(getFriendlyErrorMessage(err), 'error');
+      setProjects(projects.map(p => p.id === editingProject.id ? updatedProject : p));
+      setEditingProject(null);
+      showToast('Project updated (locally)', 'info');
     } finally {
       setGraphLoading(false);
     }
@@ -146,6 +217,23 @@ export function useHomePageLogic() {
     }
 
     setGraphLoading(true);
+    const isGuest = user?.id?.startsWith('guest-');
+
+    if (isGuest) {
+      deleteProject(project.id);
+      const localStr = localStorage.getItem('nexus_local_projects');
+      if (localStr) {
+        const currentList: Project[] = JSON.parse(localStr);
+        const updatedList = currentList.filter(p => p.id !== project.id);
+        localStorage.setItem('nexus_local_projects', JSON.stringify(updatedList));
+      }
+      localStorage.removeItem(`nexus_local_nodes_${project.id}`);
+      localStorage.removeItem(`nexus_local_links_${project.id}`);
+      showToast('Project deleted');
+      setGraphLoading(false);
+      return;
+    }
+
     try {
       await api.projects.delete(project.id);
       deleteProject(project.id);
@@ -153,6 +241,12 @@ export function useHomePageLogic() {
     } catch (err) {
       console.error('Failed to delete project:', err);
       deleteProject(project.id);
+      const localStr = localStorage.getItem('nexus_local_projects');
+      if (localStr) {
+        const currentList: Project[] = JSON.parse(localStr);
+        const updatedList = currentList.filter(p => p.id !== project.id);
+        localStorage.setItem('nexus_local_projects', JSON.stringify(updatedList));
+      }
       showToast('Project deleted (local)', 'info');
     } finally {
       setGraphLoading(false);
@@ -236,6 +330,18 @@ export function useHomePageLogic() {
     setShowAuthModal(true);
   };
 
+  const handleGuestLogin = () => {
+    const { login } = useAuthStore.getState();
+    login({
+      id: 'guest-local-user',
+      displayName: 'Local Guest',
+      email: 'guest@local.workspace',
+      avatarUrl: null,
+      provider: 'guest',
+    } as any);
+    showToast('Entered Local Workspace', 'info');
+  };
+
   return {
     state: {
       hasHydrated, isAuthenticated, user, router, search: { query: searchQuery, setQuery: setSearchQuery },
@@ -254,6 +360,7 @@ export function useHomePageLogic() {
       }
     },
     handlers: {
+      guest: { enter: handleGuestLogin },
       project: {
         create: handleCreateProject, open: handleOpenProject,
         editClick: handleEditProjectClick, update: handleUpdateProject, del: handleDeleteProject

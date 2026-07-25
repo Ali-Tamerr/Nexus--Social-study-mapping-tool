@@ -34,7 +34,7 @@ export function NotificationDropdown() {
     }, []);
 
     const loadNotifications = async () => {
-        if (!user || !isAuthenticated) return;
+        if (!user || !isAuthenticated || user.id.startsWith('guest-')) return;
         setIsLoading(true);
         try {
             // 1. Fetch user's projects and collections (now includes collab items)
@@ -107,13 +107,13 @@ export function NotificationDropdown() {
     };
 
     useEffect(() => {
-        if (isAuthenticated) {
+        if (isAuthenticated && user?.id && !user.id.startsWith('guest-')) {
             loadNotifications();
         }
-    }, [isAuthenticated, isOpen]);
+    }, [isAuthenticated, user?.id, isOpen]);
 
     useEffect(() => {
-        if (isAuthenticated && user?.id) {
+        if (isAuthenticated && user?.id && !user.id.startsWith('guest-')) {
             realtimeSync.subscribeToUserNotifications(user.id, () => {
                 loadNotifications();
             });
@@ -170,7 +170,7 @@ export function NotificationDropdown() {
         });
     };
 
-    if (!isAuthenticated) return null;
+    if (!isAuthenticated || user?.id?.startsWith('guest-')) return null;
 
     return (
         <div className="relative" ref={dropdownRef}>

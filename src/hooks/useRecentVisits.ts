@@ -11,7 +11,7 @@ export function useRecentVisits() {
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchRecent = useCallback(async () => {
-    if (isAuthenticated && user?.id) {
+    if (isAuthenticated && user?.id && !user.id.startsWith('guest-')) {
       setIsLoading(true);
       try {
         const visits = await api.recentVisits.getRecent(user.id);
@@ -40,7 +40,7 @@ export function useRecentVisits() {
   const trackVisit = useCallback(async (item: Omit<RecentVisit, 'id' | 'visitedAt'>) => {
     const visitedAt = new Date().toISOString();
     
-    if (isAuthenticated && user?.id) {
+    if (isAuthenticated && user?.id && !user.id.startsWith('guest-')) {
       try {
         await api.recentVisits.trackVisit({
           userId: user.id,

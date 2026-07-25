@@ -50,6 +50,7 @@ export default function EditorPage() {
         currentProjectId,
         nodes,
         setNodes,
+        links,
         setLinks,
         searchQuery,
         setSearchQuery,
@@ -100,6 +101,27 @@ export default function EditorPage() {
             setLoadingProgress(10);
             setError(null);
 
+            const isGuest = user?.id?.startsWith('guest-');
+
+            if (isGuest) {
+                const storedNodes = localStorage.getItem(`nexus_local_nodes_${projectId}`);
+                const storedLinks = localStorage.getItem(`nexus_local_links_${projectId}`);
+                if (storedNodes) {
+                    try { setNodes(JSON.parse(storedNodes)); } catch (e) { setNodes([]); }
+                } else {
+                    setNodes([]);
+                }
+                if (storedLinks) {
+                    try { setLinks(JSON.parse(storedLinks)); } catch (e) { setLinks([]); }
+                } else {
+                    setLinks([]);
+                }
+                setLoadingProgress(100);
+                setLoading(false);
+                setTimeout(() => setIsInitializing(false), 300);
+                return;
+            }
+
             try {
                 const apiProject = await api.projects.getById(projectId);
                 const mergedProject = {
@@ -111,8 +133,7 @@ export default function EditorPage() {
                 setLoadingProgress(35);
             } catch (err: any) {
                 console.error('[Editor] Failed to fetch project:', projectId, err);
-                setError(`Failed to load project details: ${err.message}`);
-                // Don't return, try to load nodes anyway
+                // Don't error out for local project
             }
 
             try {
@@ -161,9 +182,14 @@ export default function EditorPage() {
                 setLoadingProgress(100);
             } catch (err: any) {
                 console.warn('Failed to load project nodes/links:', err.message);
-                // Only clear if nodes fetch failed
-                if (nodes.length === 0) setNodes([]);
-                setLinks([]);
+                const storedNodes = localStorage.getItem(`nexus_local_nodes_${projectId}`);
+                const storedLinks = localStorage.getItem(`nexus_local_links_${projectId}`);
+                if (storedNodes) {
+                    try { setNodes(JSON.parse(storedNodes)); } catch (e) {}
+                }
+                if (storedLinks) {
+                    try { setLinks(JSON.parse(storedLinks)); } catch (e) {}
+                }
             } finally {
                 setLoading(false);
                 setTimeout(() => setIsInitializing(false), 500);
@@ -173,8 +199,8 @@ export default function EditorPage() {
         if (hasHydrated && isAuthenticated && projectId) {
             loadProjectData();
 
-            // Subscribe to real-time changes
-            if (user?.id) {
+            // Subscribe to real-time changes (only for remote backend users)
+            if (user?.id && !user.id.startsWith('guest-')) {
                  realtimeSync.subscribeToProject(projectId, user.id, () => {
                      showToast('Some changes were made. Please refresh the page to see the latest version.', 'info', 0);
                  }, () => {
@@ -194,11 +220,41 @@ export default function EditorPage() {
         };
     }, [projectId, hasHydrated, isAuthenticated, setCurrentProject, setNodes, setLinks, setLoading, user?.id, showToast]);
 
+    useEffect(() => {
+        if (user?.id?.startsWith('guest-') && projectId && !isInitializing) {
+            localStorage.setItem(`nexus_local_nodes_${projectId}`, JSON.stringify(nodes));
+            localStorage.setItem(`nexus_local_links_${projectId}`, JSON.stringify(links));
+        }
+    }, [nodes, links, projectId, user?.id, isInitializing]);
+
     const activeGroupId = useGraphStore(state => state.activeGroupId);
 
     const handleCreateNode = async () => {
         if (!currentProject || !projectId || !user?.id) {
-            // console.log('Add node aborted: missing currentProject, projectId, or user.id', { currentProject, projectId, user });
+            return;
+        }
+
+        const isGuest = user.id.startsWith('guest-');
+        if (isGuest) {
+            const randomX = (Math.random() - 0.5) * 150;
+            const randomY = (Math.random() - 0.5) * 150;
+            const colors = ['#8B5CF6', '#355ea1', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#06B6D4', '#84CC16'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+            const newNode = {
+                id: Date.now() * -1,
+                title: 'New Node',
+                content: '',
+                projectId: projectId as number,
+                groupId: typeof activeGroupId === 'number' ? activeGroupId : 0,
+                customColor: randomColor,
+                x: randomX,
+                y: randomY,
+                userId: user.id,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            addNode(newNode);
             return;
         }
 

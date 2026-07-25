@@ -75,6 +75,11 @@ export function UserMenu() {
           <div className="py-1">
             <button
               onClick={() => {
+                if (user.provider === 'guest' || user.id?.startsWith('guest-')) {
+                  showToast("Profile settings are not available in Local Workspace mode", 'info');
+                  setIsOpen(false);
+                  return;
+                }
                 if (user.provider === 'google') {
                   showToast("You can't edit profile because you're signed in with Google account", 'error');
                   setIsOpen(false);
@@ -91,6 +96,11 @@ export function UserMenu() {
             </button>
             <button
               onClick={() => {
+                if (user.provider === 'guest' || user.id?.startsWith('guest-')) {
+                  showToast("Password settings are not available in Local Workspace mode", 'info');
+                  setIsOpen(false);
+                  return;
+                }
                 if (user.provider === 'google') {
                   showToast("You can't change password because you're signed in with Google account", 'error');
                   setIsOpen(false);

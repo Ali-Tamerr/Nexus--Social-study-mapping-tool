@@ -39,6 +39,10 @@ export const useProjectCollectionStore = create<ProjectCollectionState>(
     setCollections: (collections) => set({ collections }),
 
     fetchCollections: async (userId) => {
+      if (!userId || userId.startsWith('guest-')) {
+        set({ collections: [], isLoading: false });
+        return;
+      }
       set({ isLoading: true, error: null });
       try {
         const raw = await api.projectCollections.getByUser(userId);
