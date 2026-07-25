@@ -49,10 +49,14 @@ export function AuthSync() {
 
                 setUser(user);
             } else if (status === 'unauthenticated') {
-                setUser(null);
-                setProjects([]);
-                setCurrentProject(null);
-                setCollections([]);
+                const currentUser = useAuthStore.getState().user;
+                const isGuest = currentUser?.id?.startsWith('guest-') || currentUser?.provider === 'guest';
+                if (!isGuest) {
+                    setUser(null);
+                    setProjects([]);
+                    setCurrentProject(null);
+                    setCollections([]);
+                }
             }
 
             setAuthLoading(false);

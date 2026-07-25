@@ -104,6 +104,39 @@ export default function EditorPage() {
             const isGuest = user?.id?.startsWith('guest-');
 
             if (isGuest) {
+                if (!currentProject) {
+                    const localStr = localStorage.getItem('nexus_local_projects');
+                    if (localStr) {
+                        try {
+                            const localProjects = JSON.parse(localStr);
+                            const found = localProjects.find((p: any) => p.id === Number(projectId));
+                            if (found) {
+                                setCurrentProject(found);
+                            } else {
+                                setCurrentProject({
+                                    id: Number(projectId),
+                                    name: 'Local Workspace Project',
+                                    description: '',
+                                    color: '#355ea1',
+                                    userId: user?.id || 'guest-local-user',
+                                    createdAt: new Date().toISOString(),
+                                    updatedAt: new Date().toISOString(),
+                                });
+                            }
+                        } catch (e) { }
+                    } else {
+                        setCurrentProject({
+                            id: Number(projectId),
+                            name: 'Local Workspace Project',
+                            description: '',
+                            color: '#355ea1',
+                            userId: user?.id || 'guest-local-user',
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                        });
+                    }
+                }
+
                 const storedNodes = localStorage.getItem(`nexus_local_nodes_${projectId}`);
                 const storedLinks = localStorage.getItem(`nexus_local_links_${projectId}`);
                 if (storedNodes) {

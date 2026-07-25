@@ -127,6 +127,8 @@ export function useHomePageLogic() {
       const currentList: Project[] = localStr ? JSON.parse(localStr) : [];
       const updatedList = [newProject, ...currentList];
       localStorage.setItem('nexus_local_projects', JSON.stringify(updatedList));
+      const defaultGroup = [{ id: 0, name: 'Group 1', color: '#8B5CF6', order: 0, projectId: newProject.id }];
+      localStorage.setItem(`nexus_local_groups_${newProject.id}`, JSON.stringify(defaultGroup));
       toggleCreateProject(false);
       showToast('Local project created', 'success');
       setGraphLoading(false);
@@ -141,6 +143,7 @@ export function useHomePageLogic() {
         userId: user.id,
       });
       addProject(newProject);
+      api.groups.create({ name: 'Group 1', color: '#8B5CF6', projectId: newProject.id }).catch(() => {});
       toggleCreateProject(false);
     } catch (err) {
       console.error('Failed to create project:', err);
@@ -158,6 +161,8 @@ export function useHomePageLogic() {
       const currentList: Project[] = localStr ? JSON.parse(localStr) : [];
       const updatedList = [localProject, ...currentList];
       localStorage.setItem('nexus_local_projects', JSON.stringify(updatedList));
+      const defaultGroup = [{ id: 0, name: 'Group 1', color: '#8B5CF6', order: 0, projectId: localProject.id }];
+      localStorage.setItem(`nexus_local_groups_${localProject.id}`, JSON.stringify(defaultGroup));
       toggleCreateProject(false);
       showToast('Project created locally', 'info');
     } finally {

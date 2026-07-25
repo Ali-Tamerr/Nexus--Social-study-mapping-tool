@@ -104,15 +104,16 @@ export function useGraphDataEffects({
 
     if (user?.id?.startsWith('guest-')) {
       const localGroups = localStorage.getItem(`nexus_local_groups_${currentProject.id}`);
+      let parsed: any[] = [];
       if (localGroups) {
-        try {
-          const parsed = JSON.parse(localGroups);
-          setGroups(parsed);
-          if (parsed.length > 0) setActiveGroupId(parsed[0].id);
-        } catch (e) { setGroups([]); }
-      } else {
-        setGroups([]);
+        try { parsed = JSON.parse(localGroups); } catch (e) { parsed = []; }
       }
+      if (!parsed || parsed.length === 0) {
+        parsed = [{ id: 0, name: 'Group 1', color: '#8B5CF6', order: 0, projectId: currentProject.id }];
+        localStorage.setItem(`nexus_local_groups_${currentProject.id}`, JSON.stringify(parsed));
+      }
+      setGroups(parsed);
+      setActiveGroupId(parsed[0].id);
       setGroupsReady(true);
       return;
     }
@@ -123,6 +124,22 @@ export function useGraphDataEffects({
       .then((backendGroups) => {
         const hidden = JSON.parse(localStorage.getItem('nexus_hidden_groups') || '[]');
         const visibleGroups = backendGroups.filter(g => !hidden.includes(g.id));
+
+        if (visibleGroups.length === 0) {
+          api.groups.create({ name: 'Group 1', color: '#8B5CF6', projectId: currentProject.id })
+            .then(g => {
+              const initialGroup = [{ ...g, name: 'Group 1', order: 0 }];
+              setGroups(initialGroup);
+              setActiveGroupId(initialGroup[0].id);
+            })
+            .catch(() => {
+              const fallback = [{ id: 0, name: 'Group 1', color: '#8B5CF6', order: 0, projectId: currentProject.id }];
+              setGroups(fallback);
+              setActiveGroupId(0);
+            });
+          setGroupsReady(true);
+          return;
+        }
 
         const groupsWithOrder = visibleGroups.map((g, i) => {
           const isColorName = colorNames.includes(g.name.toLowerCase());
@@ -142,6 +159,9 @@ export function useGraphDataEffects({
         setGroupsReady(true);
       })
       .catch(() => {
+        const fallback = [{ id: 0, name: 'Group 1', color: '#8B5CF6', order: 0, projectId: currentProject.id }];
+        setGroups(fallback);
+        setActiveGroupId(0);
         setGroupsReady(true);
       });
   }, [setGroups, setActiveGroupId, currentProject?.id, user?.id]);
@@ -311,8 +331,11 @@ export function useGraphDataEffects({
   }, [isMarqueeSelecting, isDraggingSelection, isMiddleMousePanning, isNodeDragging, isResizing]);
 
   // ─── Drawings Loading ───────────────────────────────────────
+  const drawingsLoadedRef = useRef(false);
+
   useEffect(() => {
     if (!currentProject?.id) return;
+    drawingsLoadedRef.current = false;
 
     if (user?.id?.startsWith('guest-')) {
       const localDrawings = localStorage.getItem(`nexus_local_drawings_${currentProject.id}`);
@@ -324,6 +347,9 @@ export function useGraphDataEffects({
       } else {
         setShapes([]);
       }
+      setTimeout(() => {
+        drawingsLoadedRef.current = true;
+      }, 100);
       return;
     }
 
@@ -332,12 +358,17 @@ export function useGraphDataEffects({
         const loadedShapes = drawings.map(apiDrawingToShape);
         setShapes(loadedShapes);
       })
-      .catch(() => { });
+      .catch(() => { })
+      .finally(() => {
+        setTimeout(() => {
+          drawingsLoadedRef.current = true;
+        }, 100);
+      });
   }, [currentProject?.id, apiDrawingToShape, setShapes, user?.id]);
 
   // ─── Local Workspace Auto-Save Drawings ─────────────────────
   useEffect(() => {
-    if (user?.id?.startsWith('guest-') && currentProject?.id) {
+    if (user?.id?.startsWith('guest-') && currentProject?.id && drawingsLoadedRef.current) {
       localStorage.setItem(`nexus_local_drawings_${currentProject.id}`, JSON.stringify(shapes));
     }
   }, [shapes, currentProject?.id, user?.id]);

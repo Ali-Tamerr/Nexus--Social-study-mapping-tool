@@ -132,15 +132,19 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
   const filteredNodes = useMemo(
     () => {
       let result = filterNodes(nodes, searchQuery);
-      if (activeGroupId !== null) {
-        // Filter nodes by the active group ID. 
-        // We handle the case where n.groupId might be undefined by defaulting to 0 or another fallback if needed.
-        // Assuming backend uses 0 for default.
-        result = result.filter(n => n.groupId === activeGroupId);
+      if (activeGroupId !== null && activeGroupId !== undefined) {
+        const firstGroupId = groups[0]?.id;
+        result = result.filter(n => {
+          if (n.groupId === activeGroupId) return true;
+          if ((n.groupId === undefined || n.groupId === null || n.groupId === 0) && (activeGroupId === 0 || activeGroupId === firstGroupId)) {
+            return true;
+          }
+          return false;
+        });
       }
       return result;
     },
-    [nodes, searchQuery, activeGroupId]
+    [nodes, searchQuery, activeGroupId, groups]
   );
 
   useEffect(() => {
@@ -157,9 +161,6 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     window.addEventListener('resize', updateDimensions);
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
-
-
-
   const nodeCacheRef = useRef<Map<string | number, any>>(new Map());
   const linkCacheRef = useRef<Map<string | number, any>>(new Map());
   const nodeSaveTimeoutsRef = useRef<Map<string | number, any>>(new Map());
@@ -336,15 +337,19 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
     setGroupsReady,
   });
 
-
-  // Handle Undo/Redo and Delete shortcuts
-  // Filter shapes strictly by active group (match node filtering)
   const filteredShapes = useMemo(() => {
     if (activeGroupId === null || activeGroupId === undefined) {
       return shapes;
     }
-    return shapes.filter(s => s.groupId === activeGroupId);
-  }, [shapes, activeGroupId]);
+    const firstGroupId = groups[0]?.id;
+    return shapes.filter(s => {
+      if (s.groupId === activeGroupId) return true;
+      if ((s.groupId === undefined || s.groupId === null || s.groupId === 0) && (activeGroupId === 0 || activeGroupId === firstGroupId)) {
+        return true;
+      }
+      return false;
+    });
+  }, [shapes, activeGroupId, groups]);
 
   const editingShape = useMemo(() => {
     return editingShapeId ? shapes.find(s => s.id === editingShapeId) : null;
@@ -659,39 +664,63 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
                 const timeSinceNodeClick = Date.now() - lastNodeClickTimeRef.current;
                 if (timeSinceNodeClick < 300) return;
 
-                if (graphSettings.activeTool === 'node') {
-                   const screenX = evt.clientX;
-                   const screenY = evt.clientY;
-                   const rect = containerRef.current!.getBoundingClientRect();
-                   const worldPoint = screenToWorld(screenX - rect.left, screenY - rect.top);
-                   (async () => {
-                     const projectId = currentProject?.id;
-                     if (!projectId || !user?.id) return;
-                     let groupId = typeof activeGroupId === 'number' ? activeGroupId : 0;
-                     if (groupId === 0) {
-                        try {
-                          const groups = await api.groups.getByProject(projectId);
-                          if (groups && groups.length > 0) groupId = groups[0].id;
-                        } catch (e) {}
-                     }
-                     
-                     if (pendingNodes && pendingNodes.length > 0) {
-                        const radius = Math.sqrt(pendingNodes.length) * 40;
-                        const batchToCreate = pendingNodes.map(p => ({ ...p, x: worldPoint.x + (Math.random()-0.5)*radius, y: worldPoint.y + (Math.random()-0.5)*radius, groupId, userId: user.id }));
-                        try {
-                          const newNodes = await api.nodes.batchCreate(batchToCreate);
-                          if (newNodes) { newNodes.forEach(n => addNode(n)); setPendingNodes([]); }
-                        } catch (e) {}
-                     } else {
-                        try {
-                          const newNode = await api.nodes.create({ title: 'New Node', content: '', projectId, groupId, customColor: '#8B5CF6', visualSize: 1.0, x: worldPoint.x, y: worldPoint.y, userId: user.id });
-                          if (newNode) { addNode(newNode); setActiveNode(newNode); useGraphStore.getState().toggleEditor(true); }
-                        } catch (e) {}
-                     }
-                     setGraphSettings({ activeTool: 'select' });
-                   })();
-                   return;
-                }
+                 if (graphSettings.activeTool === 'node') {
+                    const screenX = evt.clientX;
+                    const screenY = evt.clientY;
+                    const rect = containerRef.current!.getBoundingClientRect();
+                    const worldPoint = screenToWorld(screenX - rect.left, screenY - rect.top);
+                    (async () => {
+                      const projectId = currentProject?.id;
+                      if (!projectId || !user?.id) return;
+                      const isGuest = user.id.startsWith('guest-');
+                      let groupId = typeof activeGroupId === 'number' ? activeGroupId : 0;
+
+                      if (isGuest) {
+                         const newNode = {
+                           id: Date.now() * -1,
+                           title: 'New Node',
+                           content: '',
+                           projectId,
+                           groupId,
+                           customColor: '#8B5CF6',
+                           visualSize: 1.0,
+                           x: worldPoint.x,
+                           y: worldPoint.y,
+                           userId: user.id,
+                           createdAt: new Date().toISOString(),
+                           updatedAt: new Date().toISOString(),
+                         };
+                         addNode(newNode);
+                         setActiveNode(newNode);
+                         useGraphStore.getState().toggleEditor(true);
+                         setGraphSettings({ activeTool: 'select' });
+                         return;
+                      }
+
+                      if (groupId === 0) {
+                         try {
+                           const groups = await api.groups.getByProject(projectId);
+                           if (groups && groups.length > 0) groupId = groups[0].id;
+                         } catch (e) {}
+                      }
+                      
+                      if (pendingNodes && pendingNodes.length > 0) {
+                         const radius = Math.sqrt(pendingNodes.length) * 40;
+                         const batchToCreate = pendingNodes.map(p => ({ ...p, x: worldPoint.x + (Math.random()-0.5)*radius, y: worldPoint.y + (Math.random()-0.5)*radius, groupId, userId: user.id }));
+                         try {
+                           const newNodes = await api.nodes.batchCreate(batchToCreate);
+                           if (newNodes) { newNodes.forEach(n => addNode(n)); setPendingNodes([]); }
+                         } catch (e) {}
+                      } else {
+                         try {
+                           const newNode = await api.nodes.create({ title: 'New Node', content: '', projectId, groupId, customColor: '#8B5CF6', visualSize: 1.0, x: worldPoint.x, y: worldPoint.y, userId: user.id });
+                           if (newNode) { addNode(newNode); setActiveNode(newNode); useGraphStore.getState().toggleEditor(true); }
+                         } catch (e) {}
+                      }
+                      setGraphSettings({ activeTool: 'select' });
+                    })();
+                    return;
+                 }
                 setActiveNode(null);
                 setSelectedLink(null);
                 setSelectedNodeIds(new Set());
@@ -1027,6 +1056,16 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
           onAddGroup={async () => {
             const newName = `Group ${groups.length + 1}`;
             const newColor = getNextGroupColor(groups);
+            const isGuest = user?.id?.startsWith('guest-');
+
+            if (isGuest) {
+              const newGroup = { id: -Date.now(), name: newName, color: newColor, order: groups.length, projectId: currentProject!.id };
+              addGroup(newGroup);
+              setActiveGroupId(newGroup.id);
+              const updatedGroups = [...groups, newGroup];
+              localStorage.setItem(`nexus_local_groups_${currentProject!.id}`, JSON.stringify(updatedGroups));
+              return;
+            }
 
             try {
               const newGroup = await api.groups.create({ name: newName, color: newColor, projectId: currentProject!.id });
@@ -1037,21 +1076,24 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
                 realtimeSync.notifyUpdate(currentProject?.id || 0, user.id);
               }
             } catch (err: any) {
-              // console.error("Failed to create group:", err.message);
               showToast("Failed to create group. Please try again.", "error");
             }
           }}
           onRenameGroup={(id, newName) => {
             updateGroup(id, { name: newName });
+            const isGuest = user?.id?.startsWith('guest-');
+            if (isGuest && currentProject?.id) {
+              const updatedGroups = groups.map(g => g.id === id ? { ...g, name: newName } : g);
+              localStorage.setItem(`nexus_local_groups_${currentProject.id}`, JSON.stringify(updatedGroups));
+              return;
+            }
             api.groups.update(id, { name: newName })
               .then(() => {
                 if (currentProject?.id && user?.id) {
                   realtimeSync.notifyUpdate(currentProject.id, user.id);
                 }
               })
-              .catch(
-              // rr => console.warn("Backend sync failed (Rename Group):", err.message)
-            );
+              .catch(() => {});
           }}
           onDeleteGroup={async (id) => {
             const groupToDelete = groups.find(g => g.id === id);
@@ -1073,22 +1115,29 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle>((props, ref) => {
               return;
             }
 
+            const isGuest = user?.id?.startsWith('guest-');
+
             // Delete all nodes in this group
             for (const node of nodesInGroup) {
               deleteNode(node.id);
-              api.nodes.delete(node.id).catch(() => { });
+              if (!isGuest) api.nodes.delete(node.id).catch(() => { });
             }
 
             // Delete all shapes/drawings in this group
             for (const shape of shapesInGroup) {
               deleteShape(shape.id);
-              api.drawings.delete(shape.id).catch(() => { });
+              if (!isGuest) api.drawings.delete(shape.id).catch(() => { });
             }
 
             // Delete the group locally
             deleteGroup(id);
 
-            // Try backend delete silently, fall back to local hide
+            if (isGuest && currentProject?.id) {
+              const updatedGroups = groups.filter(g => g.id !== id);
+              localStorage.setItem(`nexus_local_groups_${currentProject.id}`, JSON.stringify(updatedGroups));
+              return;
+            }
+
             try {
               await api.groups.delete(id);
               if (currentProject?.id && user?.id) {

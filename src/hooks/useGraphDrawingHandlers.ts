@@ -202,6 +202,9 @@ export function useGraphDrawingHandlers({
       });
       if (remaining.length !== shapes.length) {
         setShapes(remaining);
+        if (currentProject?.id && user?.id?.startsWith('guest-')) {
+          localStorage.setItem(`nexus_local_drawings_${currentProject.id}`, JSON.stringify(remaining));
+        }
         erasedShapes.forEach(s => {
           if (s.id > 0) {
             api.drawings.delete(s.id).then(() => {
@@ -260,7 +263,10 @@ export function useGraphDrawingHandlers({
 
     addShape(newShape);
 
-    if (currentProject?.id && !user?.id?.startsWith('guest-')) {
+    if (currentProject?.id && user?.id?.startsWith('guest-')) {
+      const updatedShapes = [...useGraphStore.getState().shapes];
+      localStorage.setItem(`nexus_local_drawings_${currentProject.id}`, JSON.stringify(updatedShapes));
+    } else if (currentProject?.id && !user?.id?.startsWith('guest-')) {
       const saveDrawing = async () => {
         let groupId = activeGroupId;
         if (!groupId || groupId === 0) {
@@ -329,7 +335,14 @@ export function useGraphDrawingHandlers({
     const shapesToRender = shapesRef.current;
 
     shapesToRender.forEach(shape => {
-      if (activeGroupId !== null && activeGroupId !== undefined && shape.groupId !== activeGroupId) return;
+      const groups = useGraphStore.getState().groups;
+      const firstGroupId = groups[0]?.id;
+      const isFirstGroup = (activeGroupId === 0 || activeGroupId === firstGroupId);
+      if (activeGroupId !== null && activeGroupId !== undefined && shape.groupId !== activeGroupId) {
+        if (!isFirstGroup || (shape.groupId !== undefined && shape.groupId !== null && shape.groupId !== 0)) {
+          return;
+        }
+      }
 
       if (currentEditingId !== null && String(shape.id) === String(currentEditingId)) return;
       if (isResizing && resizingId !== null && String(shape.id) === String(resizingId)) return;

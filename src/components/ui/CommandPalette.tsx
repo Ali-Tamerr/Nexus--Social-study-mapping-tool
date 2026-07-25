@@ -88,36 +88,52 @@ export function CommandPalette() {
 
     setIsCreating(true);
     try {
-      // Pick a random color from predefined palette
       const colors = Object.values(GROUP_COLORS);
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      const isGuest = currentUserId?.startsWith('guest-') || currentProject.userId?.startsWith('guest-');
+
+      if (isGuest) {
+        const newNode: Node = {
+          id: -Date.now(),
+          title: query.trim(),
+          content: '',
+          projectId: currentProject.id,
+          groupId: 0,
+          customColor: randomColor,
+          userId: currentUserId || 'guest-local-user',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        addNode(newNode);
+        setActiveNode(newNode);
+        toggleCommandPalette(false);
+        setQuery('');
+        setSelectedIndex(0);
+        return;
+      }
 
       let newNode = await api.nodes.create({
         title: query.trim(),
         content: '',
         projectId: currentProject.id,
-        groupId: 0, // Default group
+        groupId: 0,
         customColor: randomColor,
         userId: currentUserId || undefined,
       });
 
-      // If backend didn't return the custom color, force update with full object
       if (newNode.customColor !== randomColor) {
         newNode = { ...newNode, customColor: randomColor };
         api.nodes.update(newNode.id, {
           id: newNode.id,
           title: newNode.title,
           content: newNode.content || '',
-
           groupId: newNode.groupId,
           projectId: newNode.projectId,
           userId: newNode.userId,
           customColor: randomColor,
           x: newNode.x,
           y: newNode.y,
-        }).catch(
-          // err => console.error('Failed to persist initial random color:', err)
-        );
+        }).catch(() => {});
       }
 
       addNode(newNode);
@@ -126,7 +142,6 @@ export function CommandPalette() {
       setQuery('');
       setSelectedIndex(0);
     } catch (err) {
-      // console.error('Failed to create node:', err);
     } finally {
       setIsCreating(false);
     }
