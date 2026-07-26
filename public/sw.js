@@ -1,7 +1,7 @@
-const CACHE_NAME = 'nexus-cache-v1';
-const ASSETS_TO_CACHE = [
-  '/',
+const CACHE_NAME = 'nexus-cache-v2';
+const STATIC_ASSETS = [
   '/manifest.json',
+  '/favicon.ico',
   '/icons/icon-48x48.png',
   '/icons/icon-72x72.png',
   '/icons/icon-96x96.png',
@@ -18,7 +18,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return cache.addAll(STATIC_ASSETS);
     })
   );
 });
@@ -41,26 +41,35 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Do not intercept non-GET requests or API / auth routes
   const url = new URL(event.request.url);
+
+  // Bypass SW for non-GET, API, Auth, and Next.js internal build assets (_next)
   if (
     event.request.method !== 'GET' ||
     url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/auth/')
+    url.pathname.startsWith('/auth/') ||
+    url.pathname.startsWith('/_next/')
   ) {
     return;
   }
 
+  // Network-first strategy for page navigations to prevent stale chunk 404s after new Vercel deploys
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match('/manifest.json');
+      })
+    );
+    return;
+  }
+
+  // Cache-first for static icons / assets
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
-      return fetch(event.request).catch((err) => {
-        // Return fallback or rethrow cleanly
-        console.warn('[SW] Fetch failed for:', event.request.url, err);
-        throw err;
-      });
+      return fetch(event.request);
     })
   );
 });
