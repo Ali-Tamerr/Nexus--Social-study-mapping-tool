@@ -71,7 +71,7 @@ export default function HomePage() {
       </Suspense>
       <Navbar showSearch={false}>
         <a
-          href="https://github.com/Ali-Tamerr/nexus--social-study-mapping-tool"
+          href="https://github.com/Ali-Tamerr/Nexus-SSMT"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-center h-8 w-8 md:h-9 md:w-9 border border-zinc-400/50 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-all"

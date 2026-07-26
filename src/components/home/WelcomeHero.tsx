@@ -2,7 +2,44 @@
 
 import Image from 'next/image';
 import NexusLogo from '@/assets/Logo/Logo with no circle.svg';
-import { HardDrive, Network, Share2, ShieldCheck } from 'lucide-react';
+import { HardDrive } from 'lucide-react';
+
+interface FeatureCardProps {
+  title: string;
+  titleColor: string;
+  description: string;
+}
+
+function FeatureCard({ title, titleColor, description }: FeatureCardProps) {
+  return (
+    <article className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 backdrop-blur-sm">
+      <div className={`mb-2 flex items-center gap-2 font-semibold text-sm ${titleColor}`}>
+        <h3>{title}</h3>
+      </div>
+      <p className="text-xs text-zinc-400">
+        {description}
+      </p>
+    </article>
+  );
+}
+
+const FEATURES: FeatureCardProps[] = [
+  {
+    title: 'Dynamic Force Graphs',
+    titleColor: 'text-blue-400',
+    description: 'Visualize relationships dynamically using D3-force graph engines with drag-and-drop nodes and custom shapes.',
+  },
+  {
+    title: 'Real-Time Sync',
+    titleColor: 'text-indigo-400',
+    description: 'Collaborate instantly with team members, share collections, and track changes live on the canvas.',
+  },
+  {
+    title: 'Offline Local Mode',
+    titleColor: 'text-emerald-400',
+    description: 'Work 100% offline with zero sign-in required. Your data stays saved locally on your device.',
+  },
+];
 
 export function WelcomeHero({
   onSignup,
@@ -50,33 +87,9 @@ export function WelcomeHero({
 
       {/* Feature Highlights for AI Crawling & Search intent */}
       <section aria-label="Nexus Key Features" className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3 max-w-4xl text-left">
-        <article className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 backdrop-blur-sm">
-          <div className="mb-2 flex items-center gap-2 text-blue-400 font-semibold text-sm">
-            <Network className="h-4 w-4" />
-            <h3>Dynamic Force Graphs</h3>
-          </div>
-          <p className="text-xs text-zinc-400">
-            Visualize relationships dynamically using D3-force graph engines with drag-and-drop nodes and custom shapes.
-          </p>
-        </article>
-        <article className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 backdrop-blur-sm">
-          <div className="mb-2 flex items-center gap-2 text-indigo-400 font-semibold text-sm">
-            <Share2 className="h-4 w-4" />
-            <h3>Real-Time Sync</h3>
-          </div>
-          <p className="text-xs text-zinc-400">
-            Collaborate instantly with team members, share collections, and track changes live on the canvas.
-          </p>
-        </article>
-        <article className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 backdrop-blur-sm">
-          <div className="mb-2 flex items-center gap-2 text-emerald-400 font-semibold text-sm">
-            <ShieldCheck className="h-4 w-4" />
-            <h3>Offline Local Mode</h3>
-          </div>
-          <p className="text-xs text-zinc-400">
-            Work 100% offline with zero sign-in required. Your data stays saved locally on your device.
-          </p>
-        </article>
+        {FEATURES.map((feature) => (
+          <FeatureCard key={feature.title} {...feature} />
+        ))}
       </section>
 
       <button
