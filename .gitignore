@@ -54,3 +54,5 @@ API_DOCUMENTATION_FOR_AI_MODELS.md
 .codex
 .claude
 .agents
+
+ai_chats/
