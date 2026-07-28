@@ -64,7 +64,7 @@ export function ProjectCard({
   };
 
   return (
-    <div
+    <article
       onClick={isLoading ? undefined : handleClick}
       role="button"
       tabIndex={isLoading ? -1 : 0}
@@ -194,7 +194,7 @@ export function ProjectCard({
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -234,11 +234,14 @@ export function ProjectGrid({
 
   return (
     <>
-      <div className={
-        viewMode === 'grid'
-          ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
-          : 'flex flex-col gap-3'
-      }>
+      <section
+        aria-label="Projects"
+        className={
+          viewMode === 'grid'
+            ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
+            : 'flex flex-col gap-3'
+        }
+      >
         {projects.map((project) => (
           <ProjectCard
             key={project.id}
@@ -254,7 +257,7 @@ export function ProjectGrid({
             currentUserId={currentUserId}
           />
         ))}
-      </div>
+      </section>
 
       <ShareModal
         isOpen={!!shareUrl}

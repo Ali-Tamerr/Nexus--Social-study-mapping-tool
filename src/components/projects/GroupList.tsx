@@ -42,13 +42,16 @@ export function GroupList({ groups, onDelete, onEdit, viewMode, currentUserId }:
 
     return (
         <>
-            <div className={
-                viewMode === 'grid'
-                    ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
-                    : 'flex flex-col gap-3'
-            }>
+            <section
+                aria-label="Collections"
+                className={
+                    viewMode === 'grid'
+                        ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
+                        : 'flex flex-col gap-3'
+                }
+            >
                 {groups.filter(g => g && g.id).map((group) => (
-                    <div
+                    <article
                         key={group.id}
                         onClick={() => handleOpenGroup(group)}
                         role="button"
@@ -131,9 +134,9 @@ export function GroupList({ groups, onDelete, onEdit, viewMode, currentUserId }:
                                 )}
                             </div>
                         </div>
-                    </div>
+                    </article>
                 ))}
-            </div>
+            </section>
 
             <ShareModal
                 isOpen={!!shareUrl}
