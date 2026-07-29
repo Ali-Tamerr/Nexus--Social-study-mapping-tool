@@ -1,19 +1,18 @@
 # Nexus - Open Source Social Study Mapping Tool (SSMT)
 
-> Nexus is an interactive, open-source Social Study Mapping platform built with Next.js 16 and D3-force to visualize complex relationships, notes, and knowledge graphs.
+> Nexus is an interactive, open-source Social Study Mapping platform and dark-themed visual whiteboard designed to visualize complex relationships, notes, and knowledge graphs.
 
-Nexus turns fragmented notes, study concepts, and research data into dynamic, interconnected visual graphs. It features a 100% free Local Workspace mode with offline storage and zero login requirements, alongside real-time collaboration and cloud syncing.
+Nexus turns fragmented notes, study concepts, and research data into dynamic, interconnected visual graphs on a dark-themed canvas. It features a 100% free Local Workspace mode with offline storage and zero login requirements, alongside real-time collaboration and cloud syncing.
 
 ## Core Features
-- **Dynamic Force-Directed Graphs:** Interactive visual network visualization powered by D3-force engines with drag-and-drop nodes and custom shapes.
+- **Dynamic Force-Directed Graphs:** Interactive visual network visualization and whiteboard canvas with drag-and-drop nodes and custom shapes.
 - **Local Workspace Mode:** Full offline functionality using browser LocalStorage with zero authentication required.
 - **Real-Time Collaboration:** Synchronized project sharing and multi-user live editing powered by Supabase Realtime.
 - **Drawing & Annotation Canvas:** Overlays shapes, lines, text, and custom groupings onto knowledge graphs.
 - **Command Palette (Ctrl+K):** Instant navigation and quick-creation tools across projects, groups, and nodes.
 
 ## Technical Stack
-- **Frontend Framework:** Next.js 16 (React 19, TypeScript)
-- **Visualization Engine:** react-force-graph-2d & D3-force
+- **Frontend Framework:** React & TypeScript
 - **State Management:** Zustand 5
 - **Styling:** Tailwind CSS 4
 - **Backend API:** RESTful API with PascalCase to camelCase translation layer

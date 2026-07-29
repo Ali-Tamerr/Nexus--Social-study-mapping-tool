@@ -27,7 +27,7 @@ const FEATURES: FeatureCardProps[] = [
   {
     title: 'Dynamic Force Graphs',
     titleColor: 'text-blue-400',
-    description: 'Visualize relationships dynamically using D3-force graph engines with drag-and-drop nodes and custom shapes.',
+    description: 'Visualize relationships dynamically using interactive graph engines with drag-and-drop nodes and custom shapes.',
   },
   {
     title: 'Real-Time Sync',
